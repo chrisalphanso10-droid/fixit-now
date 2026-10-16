@@ -70,6 +70,7 @@ export async function adminLogin(email, password) {
     localStorage.setItem('fixit_token', res.token);
     localStorage.setItem('fixit_user', JSON.stringify(session));
     localStorage.setItem('fixit_role', 'admin');
+    notifyAuthChange();
   } catch (e) {
     console.warn('Storage failed for admin session:', e);
   }
@@ -90,12 +91,19 @@ export function getAdminSession() {
   }
 }
 
+function notifyAuthChange() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('fixit_auth_change'));
+  }
+}
+
 export function adminLogout() {
   try {
     localStorage.removeItem(ADMIN_SESSION_KEY);
     localStorage.removeItem('fixit_token');
     localStorage.removeItem('fixit_user');
     localStorage.removeItem('fixit_role');
+    notifyAuthChange();
   } catch (e) {
     console.warn('Could not clear admin session:', e);
   }

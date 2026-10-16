@@ -29,6 +29,7 @@ import {
   declineIncomingJob,
 } from '../../services/partnerService';
 import { logoutPartner } from '../../services/authService';
+import { useAuth } from '../../context/AuthContext';
 
 export default function PartnerPortal({
   initialTab = 'dashboard',
@@ -36,8 +37,9 @@ export default function PartnerPortal({
   setTheme,
   onExitPortal,
 }) {
+  const { user: authUser } = useAuth() || {};
   const [activeTab, setActiveTab] = useState(initialTab);
-  const [partner, setPartner] = useState(null);
+  const [partner, setPartner] = useState(authUser || null);
   const [subscription, setSubscription] = useState(null);
   const [dashboardData, setDashboardData] = useState(null);
   const [activeJob, setActiveJobState] = useState(null);
@@ -74,7 +76,7 @@ export default function PartnerPortal({
 
   // Load partner session data
   const refreshPartnerData = async () => {
-    const currentPartner = getActivePartner();
+    const currentPartner = authUser || getActivePartner();
     setPartner(currentPartner);
     setOnline(Boolean(currentPartner.online));
 

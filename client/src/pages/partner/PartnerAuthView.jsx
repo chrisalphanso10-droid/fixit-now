@@ -13,6 +13,7 @@ import {
   resetPartnerPasswordWithOtp,
 } from '../../services/authService';
 import { getServices } from '../../services/serviceService';
+import { useAuth } from '../../context/AuthContext';
 
 export default function PartnerAuthView({
   initialMode = 'login', // 'login' | 'register' | 'forgot'
@@ -20,6 +21,7 @@ export default function PartnerAuthView({
   onNavigateToCustomerAuth,
   onCancel,
 }) {
+  const { loginPartner: authLoginPartner, registerPartner: authRegisterPartner } = useAuth() || {};
   const [mode, setMode] = useState(initialMode); // 'login' | 'register' | 'forgot'
 
   // Login form state
@@ -78,7 +80,9 @@ export default function PartnerAuthView({
       } else if (scenarioType === 'warning_plan') {
         email = 'ramesh.electric@fixitnow.local';
       }
-      const partner = await partnerLogin(email, password);
+      const partner = authLoginPartner
+        ? await authLoginPartner(email, password)
+        : await partnerLogin(email, password);
       if (onSuccess) onSuccess(partner);
     } catch (err) {
       setError(`! ${err.message || 'Demo login failed.'}`);
@@ -93,7 +97,9 @@ export default function PartnerAuthView({
     setLoading(true);
     setError(null);
     try {
-      const partner = await partnerLogin(loginEmail, loginPassword);
+      const partner = authLoginPartner
+        ? await authLoginPartner(loginEmail, loginPassword)
+        : await partnerLogin(loginEmail, loginPassword);
       if (onSuccess) onSuccess(partner);
     } catch (err) {
       setError(`! ${err.message || 'Login failed.'}`);
@@ -121,7 +127,7 @@ export default function PartnerAuthView({
     }
 
     try {
-      const newPartner = await partnerRegister({
+      const regData = {
         name: regName,
         email: regEmail,
         phone: regPhone,
@@ -129,7 +135,10 @@ export default function PartnerAuthView({
         vehicle: regVehicle,
         service_id: Number(selectedServiceId),
         password: regPassword,
-      });
+      };
+      const newPartner = authRegisterPartner
+        ? await authRegisterPartner(regData)
+        : await partnerRegister(regData);
 
       setSuccessMessage('Registration successful! Proceeding to subscription plan selection...');
       setTimeout(() => {

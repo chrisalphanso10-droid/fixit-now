@@ -16,6 +16,7 @@ import CustomerProfileView from './CustomerProfileView';
 import SavedAddressesView from './SavedAddressesView';
 import { getCurrentCustomer, customerLogout } from '../../services/authService';
 import { getActiveRequest, setActiveRequest } from '../../services/requestService';
+import { useAuth } from '../../context/AuthContext';
 
 export default function CustomerPortal({
   initialTab = 'dashboard',
@@ -24,14 +25,15 @@ export default function CustomerPortal({
   onExitPortal,
   preselectedService = null,
 }) {
+  const { user: authUser } = useAuth() || {};
   const [activeTab, setActiveTab] = useState(initialTab);
-  const [customer, setCustomer] = useState(null);
+  const [customer, setCustomer] = useState(authUser || null);
   const [activeRequest, setActiveRequestState] = useState(null);
   const [selectedServiceForBooking, setSelectedServiceForBooking] = useState(preselectedService);
 
   // Load customer session & active job
   useEffect(() => {
-    const cur = getCurrentCustomer();
+    const cur = authUser || getCurrentCustomer();
     setCustomer(cur);
     const existingActive = getActiveRequest();
     setActiveRequestState(existingActive);
@@ -41,7 +43,7 @@ export default function CustomerPortal({
       setSelectedServiceForBooking(preselectedService);
       setActiveTab('new-request');
     }
-  }, [preselectedService]);
+  }, [preselectedService, authUser]);
 
   // Sync with URL hash
   useEffect(() => {

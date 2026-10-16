@@ -11,12 +11,14 @@ import {
   sendForgotPasswordOtp,
   resetPasswordWithOtp,
 } from '../../services/authService';
+import { useAuth } from '../../context/AuthContext';
 
 export default function CustomerAuthView({
   initialMode = 'login', // 'login' | 'register' | 'forgot'
   onSuccess,
   onCancel,
 }) {
+  const { loginCustomer: authLoginCustomer, registerCustomer: authRegisterCustomer } = useAuth() || {};
   const [mode, setMode] = useState(initialMode); // 'login' | 'register' | 'forgot'
   const [showPartnerNotice, setShowPartnerNotice] = useState(false);
 
@@ -58,7 +60,9 @@ export default function CustomerAuthView({
     setLoading(true);
     setError(null);
     try {
-      const user = await customerLogin(loginEmail, loginPassword);
+      const user = authLoginCustomer
+        ? await authLoginCustomer(loginEmail, loginPassword)
+        : await customerLogin(loginEmail, loginPassword);
       if (onSuccess) onSuccess(user);
     } catch (err) {
       setError(`! ${err.message || 'Login failed.'}`);
@@ -77,13 +81,16 @@ export default function CustomerAuthView({
     setLoading(true);
     setError(null);
     try {
-      const user = await customerRegister({
+      const regData = {
         name: regName,
         email: regEmail,
         phone: regPhone,
         address: regAddress,
         password: regPassword,
-      });
+      };
+      const user = authRegisterCustomer
+        ? await authRegisterCustomer(regData)
+        : await customerRegister(regData);
       if (onSuccess) onSuccess(user);
     } catch (err) {
       setError(`! ${err.message || 'Registration failed.'}`);

@@ -15,6 +15,12 @@ const CUSTOMER_USER_KEY = 'fixit_customer_user';
 const PARTNER_USER_KEY = 'fixit_partner_user';
 const CURRENT_PARTNER_KEY = 'fixit_current_partner';
 
+function notifyAuthChange() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('fixit_auth_change'));
+  }
+}
+
 /**
  * Validates password per SRS FR-C2:
  * At least 6 characters and contains at least one special character.
@@ -56,6 +62,7 @@ export async function customerLogin(email, password) {
     localStorage.setItem(AUTH_USER_KEY, JSON.stringify(res.user));
     localStorage.setItem(AUTH_ROLE_KEY, 'customer');
     localStorage.setItem(CUSTOMER_USER_KEY, JSON.stringify(res.user));
+    notifyAuthChange();
   }
 
   return res.user;
@@ -89,6 +96,7 @@ export async function customerRegister({ name, email, password, phone, address }
     localStorage.setItem(AUTH_USER_KEY, JSON.stringify(res.user));
     localStorage.setItem(AUTH_ROLE_KEY, 'customer');
     localStorage.setItem(CUSTOMER_USER_KEY, JSON.stringify(res.user));
+    notifyAuthChange();
   }
 
   return res.user;
@@ -160,6 +168,7 @@ export function customerLogout() {
   localStorage.removeItem(AUTH_USER_KEY);
   localStorage.removeItem(AUTH_ROLE_KEY);
   localStorage.removeItem(CUSTOMER_USER_KEY);
+  notifyAuthChange();
 }
 
 /* ========================================================================== */
@@ -187,6 +196,7 @@ export async function partnerLogin(email, password) {
     localStorage.setItem(AUTH_ROLE_KEY, 'partner');
     localStorage.setItem(PARTNER_USER_KEY, JSON.stringify(res.user));
     localStorage.setItem(CURRENT_PARTNER_KEY, JSON.stringify(res.user));
+    notifyAuthChange();
   }
 
   return res.user;
@@ -233,6 +243,7 @@ export async function partnerRegister({ name, email, password, phone, address, s
     localStorage.setItem(AUTH_ROLE_KEY, 'partner');
     localStorage.setItem(PARTNER_USER_KEY, JSON.stringify(res.user));
     localStorage.setItem(CURRENT_PARTNER_KEY, JSON.stringify(res.user));
+    notifyAuthChange();
   }
 
   return res.user;
@@ -321,6 +332,7 @@ export function logoutPartner() {
   localStorage.removeItem(AUTH_ROLE_KEY);
   localStorage.removeItem(PARTNER_USER_KEY);
   localStorage.removeItem(CURRENT_PARTNER_KEY);
+  notifyAuthChange();
 }
 
 export default {

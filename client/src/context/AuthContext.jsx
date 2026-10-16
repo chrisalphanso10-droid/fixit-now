@@ -66,6 +66,15 @@ export function AuthProvider({ children }) {
       localStorage.removeItem(ROLE_KEY);
       setRole(null);
     }
+
+    if (newRole === 'customer' && newUser) {
+      localStorage.setItem('fixit_customer_user', JSON.stringify(newUser));
+    } else if (newRole === 'partner' && newUser) {
+      localStorage.setItem('fixit_partner_user', JSON.stringify(newUser));
+      localStorage.setItem('fixit_current_partner', JSON.stringify(newUser));
+    } else if (newRole === 'admin' && newUser) {
+      localStorage.setItem('fixit_admin_session', JSON.stringify(newUser));
+    }
   };
 
   const logout = useCallback(() => {
@@ -74,11 +83,40 @@ export function AuthProvider({ children }) {
     localStorage.removeItem(ROLE_KEY);
     localStorage.removeItem('fixit_customer_user');
     localStorage.removeItem('fixit_partner_user');
+    localStorage.removeItem('fixit_current_partner');
     localStorage.removeItem('fixit_admin_session');
     setToken(null);
     setUser(null);
     setRole(null);
   }, []);
+
+  const reloadSession = useCallback(() => {
+    const storedToken = localStorage.getItem(TOKEN_KEY);
+    const storedUser = localStorage.getItem(USER_KEY);
+    const storedRole = localStorage.getItem(ROLE_KEY);
+    if (storedToken && storedUser && storedRole) {
+      try {
+        setToken(storedToken);
+        setUser(JSON.parse(storedUser));
+        setRole(storedRole);
+      } catch {
+        // ignore
+      }
+    } else {
+      setToken(null);
+      setUser(null);
+      setRole(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('fixit_auth_change', reloadSession);
+    window.addEventListener('storage', reloadSession);
+    return () => {
+      window.removeEventListener('fixit_auth_change', reloadSession);
+      window.removeEventListener('storage', reloadSession);
+    };
+  }, [reloadSession]);
 
   // Verify active JWT token on mount via GET /api/auth/me
   useEffect(() => {

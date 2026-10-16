@@ -9,8 +9,10 @@
 
 import { useState } from 'react';
 import { adminLogin } from '../../services/adminService';
+import { useAuth } from '../../context/AuthContext';
 
 export default function AdminLoginView({ onSuccess, onCancel }) {
+  const { loginAdmin: authLoginAdmin } = useAuth() || {};
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
@@ -22,7 +24,9 @@ export default function AdminLoginView({ onSuccess, onCancel }) {
     setLoading(true);
 
     try {
-      const session = await adminLogin(email, password);
+      const session = authLoginAdmin
+        ? await authLoginAdmin(email, password)
+        : await adminLogin(email, password);
       onSuccess(session);
     } catch (err) {
       setError(err.message || 'Failed to authenticate administrator account.');
