@@ -4,6 +4,8 @@ import CustomerPortal from './pages/customer/CustomerPortal';
 import CustomerAuthView from './pages/customer/CustomerAuthView';
 import PartnerPortal from './pages/partner/PartnerPortal';
 import PartnerAuthView from './pages/partner/PartnerAuthView';
+import AdminPortal from './pages/admin/AdminPortal';
+import AdminLoginView from './pages/admin/AdminLoginView';
 import { checkServerHealth } from './services/healthService';
 
 export default function App() {
@@ -13,6 +15,12 @@ export default function App() {
 
   const [currentView, setCurrentView] = useState(() => {
     const hash = window.location.hash.replace('#/', '').replace('#', '');
+    if (hash === 'admin/login') {
+      return 'admin-login';
+    }
+    if (hash.startsWith('admin')) {
+      return 'admin';
+    }
     if (
       hash.startsWith('customer/login') ||
       hash.startsWith('customer/register') ||
@@ -94,6 +102,29 @@ export default function App() {
     return 'dashboard';
   });
 
+  const [adminTab, setAdminTab] = useState(() => {
+    const hash = window.location.hash.replace('#/', '').replace('#', '');
+    if (hash.startsWith('admin/')) {
+      const sub = hash.replace('admin/', '');
+      const valid = [
+        'dashboard',
+        'kyc',
+        'plans',
+        'services',
+        'customers',
+        'partners',
+        'requests',
+        'subscriptions',
+        'ratings',
+        'activity-log',
+      ];
+      if (valid.includes(sub)) {
+        return sub;
+      }
+    }
+    return 'dashboard';
+  });
+
   const [preselectedService, setPreselectedService] = useState(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [healthData, setHealthData] = useState(null);
@@ -110,6 +141,15 @@ export default function App() {
       const hash = window.location.hash.replace('#/', '').replace('#', '');
       if (hash === '' || hash === '/') {
         setCurrentView('landing');
+      } else if (hash === 'admin/login') {
+        setCurrentView('admin-login');
+      } else if (hash.startsWith('admin/')) {
+        const sub = hash.replace('admin/', '');
+        setCurrentView('admin');
+        setAdminTab(sub);
+      } else if (hash === 'admin') {
+        setCurrentView('admin');
+        setAdminTab('dashboard');
       } else if (hash === 'customer/login') {
         setCurrentView('customer-auth');
         setAuthMode('login');
@@ -178,6 +218,19 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const navigateToAdminPortal = (tab = 'dashboard') => {
+    setAdminTab(tab);
+    setCurrentView('admin');
+    window.location.hash = `/admin/${tab}`;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateToAdminLogin = () => {
+    setCurrentView('admin-login');
+    window.location.hash = '/admin/login';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const returnToLanding = () => {
     setCurrentView('landing');
     window.location.hash = '/';
@@ -210,6 +263,8 @@ export default function App() {
           onOpenCustomerAuth={navigateToCustomerAuth}
           onOpenPartnerPortal={navigateToPartnerPortal}
           onOpenPartnerAuth={navigateToPartnerAuth}
+          onOpenAdminPortal={navigateToAdminPortal}
+          onOpenAdminLogin={navigateToAdminLogin}
         />
       )}
 
@@ -313,6 +368,53 @@ export default function App() {
 
           <div className="text-center font-mono text-xs text-[var(--theme-text-muted)] py-4">
             FixIt Now Partner Dispatch &amp; Authentication · Sample Data Mode
+          </div>
+        </div>
+      )}
+
+      {currentView === 'admin' && (
+        <AdminPortal
+          initialTab={adminTab}
+          theme={theme}
+          setTheme={setTheme}
+          onExitPortal={returnToLanding}
+        />
+      )}
+
+      {currentView === 'admin-login' && (
+        <div className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text-main)] flex flex-col justify-between p-4 sm:p-8">
+          <div className="max-w-md mx-auto w-full pt-4">
+            <div className="flex items-center justify-between border-b-2 border-[var(--theme-border)] pb-4 mb-4">
+              <a
+                href="#/"
+                onClick={(e) => {
+                  e.preventDefault();
+                  returnToLanding();
+                }}
+                className="flex items-center gap-2 group"
+              >
+                <span className="w-5 h-5 bg-signal border border-[var(--theme-border)] rotate-45 inline-block group-hover:rotate-90 transition-transform" />
+                <span className="font-display font-extrabold text-xl tracking-tight text-[var(--theme-text-main)]">
+                  FixIt <span className="text-signal">Admin</span>
+                </span>
+              </a>
+              <button
+                type="button"
+                onClick={returnToLanding}
+                className="font-mono text-xs font-bold uppercase underline text-signal hover:text-[var(--theme-text-main)]"
+              >
+                ← Back to Board
+              </button>
+            </div>
+
+            <AdminLoginView
+              onSuccess={() => navigateToAdminPortal('dashboard')}
+              onCancel={returnToLanding}
+            />
+          </div>
+
+          <div className="text-center font-mono text-xs text-[var(--theme-text-muted)] py-4">
+            FixIt Now Central Administration · Sample Data Mode
           </div>
         </div>
       )}

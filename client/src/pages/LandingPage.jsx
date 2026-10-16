@@ -8,6 +8,8 @@ export default function LandingPage({
   onOpenCustomerAuth,
   onOpenPartnerPortal,
   onOpenPartnerAuth,
+  _onOpenAdminPortal,
+  onOpenAdminLogin,
 }) {
   const [services, setServices] = useState([]);
   const [faqs, setFaqs] = useState([]);
@@ -16,6 +18,14 @@ export default function LandingPage({
   const [roleModal, setRoleModal] = useState(null); // { action: 'login' | 'signup' }
   const [partnerModal, setPartnerModal] = useState(null); // { action: 'login' | 'signup' }
   const [authModal, setAuthModal] = useState(null); // { role: 'admin' | 'customer' | 'partner', action: 'login' | 'signup' }
+
+  const handleAdminLogin = () => {
+    if (onOpenAdminLogin) {
+      onOpenAdminLogin();
+    } else {
+      window.location.hash = '/admin/login';
+    }
+  };
 
   const handleCustomerAuth = (action) => {
     if (onOpenCustomerAuth) {
@@ -1043,7 +1053,7 @@ export default function LandingPage({
               </a>
               <button
                 type="button"
-                onClick={() => setAuthModal({ role: 'admin', action: 'login' })}
+                onClick={handleAdminLogin}
                 className="block text-on-dark hover:text-paper transition-colors py-1 text-left"
               >
                 Admin Login (/admin/login)
@@ -1273,7 +1283,7 @@ export default function LandingPage({
                 type="button"
                 onClick={() => {
                   setRoleModal(null);
-                  setAuthModal({ role: 'admin', action: 'login' });
+                  handleAdminLogin();
                 }}
                 className="underline hover:text-signal"
               >
