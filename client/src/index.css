@@ -66,6 +66,7 @@
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
     transition:
       background-color 150ms ease,
       color 150ms ease;
@@ -276,6 +277,61 @@
 
   .animate-stamp-in {
     animation: stampIn 200ms cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  }
+
+  /* FAQ Native Details / Accordions (DESIGN.md Section 5) */
+  details.faq-item {
+    border-top: 2px solid var(--theme-border);
+    transition: background-color 150ms ease;
+  }
+  details.faq-item:last-of-type {
+    border-bottom: 2px solid var(--theme-border);
+  }
+  details.faq-item summary {
+    cursor: pointer;
+    list-style: none;
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.25rem 0.5rem;
+    user-select: none;
+  }
+  details.faq-item summary::-webkit-details-marker {
+    display: none;
+  }
+  details.faq-item[open] summary {
+    color: #ff5b14;
+  }
+
+  /* Trade Service Chips (DESIGN.md Section 5: 2px border, square, DM Sans/Bricolage) */
+  .service-chip {
+    border: 2px solid var(--theme-border);
+    background-color: var(--theme-surface);
+    color: var(--theme-text-main);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 700;
+    padding: 16px 20px;
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-shadow: 4px 4px 0 var(--theme-border);
+    transition:
+      transform 150ms ease,
+      box-shadow 150ms ease,
+      background-color 150ms ease;
+    cursor: pointer;
+    text-align: left;
+  }
+  .service-chip:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 var(--theme-border);
+    background-color: var(--theme-surface-sub);
+  }
+  .service-chip.active {
+    background-color: #ff5b14;
+    color: #111418;
   }
 }
 
