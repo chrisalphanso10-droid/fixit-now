@@ -4,9 +4,9 @@ import { getServices, getLandingFaqs } from '../services/serviceService';
 export default function LandingPage({
   theme,
   setTheme,
-  onOpenCustomerPortal,
+  _onOpenCustomerPortal,
   onOpenCustomerAuth,
-  onOpenPartnerPortal,
+  _onOpenPartnerPortal,
   onOpenPartnerAuth,
   _onOpenAdminPortal,
   onOpenAdminLogin,
@@ -38,19 +38,14 @@ export default function LandingPage({
   const handlePartnerAuth = (action) => {
     if (onOpenPartnerAuth) {
       onOpenPartnerAuth(action === 'signup' ? 'register' : 'login');
-    } else if (onOpenPartnerPortal) {
-      onOpenPartnerPortal('dashboard');
     } else {
-      setPartnerModal({ action });
+      setRoleModal({ action });
     }
   };
 
-  const handleBookService = (service) => {
-    if (onOpenCustomerPortal) {
-      onOpenCustomerPortal('new-request', service);
-    } else {
-      setRoleModal({ action: 'signup' });
-    }
+  const handleBookService = () => {
+    // Portals will only open after registration (1st time) or login
+    handleCustomerAuth('signup');
   };
 
   useEffect(() => {
@@ -114,28 +109,6 @@ export default function LandingPage({
             >
               Help
             </a>
-            <button
-              type="button"
-              onClick={() =>
-                onOpenCustomerPortal
-                  ? onOpenCustomerPortal('dashboard')
-                  : handleCustomerAuth('login')
-              }
-              className="text-signal hover:underline transition-colors uppercase font-bold"
-            >
-              Customer Portal
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                onOpenPartnerPortal
-                  ? onOpenPartnerPortal('dashboard')
-                  : handlePartnerAuth('login')
-              }
-              className="text-[var(--theme-text-main)] hover:text-signal hover:underline transition-colors uppercase font-bold"
-            >
-              Partner Portal
-            </button>
           </nav>
 
           {/* Right Header Actions: Theme Switcher, Login, Dark Sign up */}
@@ -305,34 +278,6 @@ export default function LandingPage({
               >
                 <span>Sign up</span>
                 <span className="font-mono text-xs text-ink font-bold">CUSTOMER / PARTNER →</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  if (onOpenCustomerPortal) {
-                    onOpenCustomerPortal('dashboard');
-                  } else {
-                    handleCustomerAuth('login');
-                  }
-                }}
-                className="btn-dark w-full min-h-[44px]"
-              >
-                Customer Portal
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  if (onOpenPartnerPortal) {
-                    onOpenPartnerPortal('dashboard');
-                  } else {
-                    handlePartnerAuth('login');
-                  }
-                }}
-                className="btn-secondary w-full min-h-[44px]"
-              >
-                Partner Portal
               </button>
             </div>
           </div>
@@ -511,14 +456,14 @@ export default function LandingPage({
             <div className="pt-6 border-t-2 border-dashed border-[#3A3F47] flex flex-col sm:flex-row items-center justify-between gap-4">
               <button
                 type="button"
-                onClick={() => setPartnerModal({ action: 'signup' })}
+                onClick={() => handlePartnerAuth('signup')}
                 className="btn-primary w-full sm:w-auto min-h-[44px]"
               >
                 Join as partner
               </button>
               <button
                 type="button"
-                onClick={() => setPartnerModal({ action: 'login' })}
+                onClick={() => handlePartnerAuth('login')}
                 className="font-sans font-bold underline text-on-dark text-sm hover:text-signal transition-colors py-2"
               >
                 Partner login
@@ -1001,7 +946,7 @@ export default function LandingPage({
                 onClick={() => handleCustomerAuth('login')}
                 className="block text-on-dark hover:text-paper transition-colors py-1 text-left"
               >
-                Customer Portal Login
+                Customer Login
               </button>
             </div>
 
@@ -1012,17 +957,17 @@ export default function LandingPage({
               </span>
               <button
                 type="button"
-                onClick={() => setPartnerModal({ action: 'signup' })}
+                onClick={() => handlePartnerAuth('signup')}
                 className="block text-on-dark hover:text-paper transition-colors py-1 text-left"
               >
                 Register as Partner
               </button>
               <button
                 type="button"
-                onClick={() => setPartnerModal({ action: 'login' })}
+                onClick={() => handlePartnerAuth('login')}
                 className="block text-on-dark hover:text-paper transition-colors py-1 text-left"
               >
-                Partner Dashboard Login
+                Partner Login
               </button>
               <a
                 href="#why-fixit"
@@ -1102,7 +1047,7 @@ export default function LandingPage({
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 bg-signal border border-[var(--theme-border)] rotate-45 inline-block" />
                 <span className="font-mono text-xs uppercase tracking-widest text-signal font-bold">
-                  ACCESS PORTAL SELECTION
+                  AUTHENTICATION &amp; ACCESS
                 </span>
               </div>
               <button
@@ -1123,7 +1068,7 @@ export default function LandingPage({
               >
                 {roleModal.action === 'signup'
                   ? 'Choose Role to Create Account'
-                  : 'Select Portal to Log In'}
+                  : 'Choose Role to Log In'}
               </h3>
               <p className="text-sm text-[var(--theme-text-soft)] mt-1">
                 Select your side of the work order to access the appropriate dashboard.

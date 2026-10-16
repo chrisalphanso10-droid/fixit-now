@@ -3,7 +3,9 @@
  * Conforms to SRS FR-A6:
  * - Manage 8 service categories
  * - Active / disabled toggles
- * - Edit category name, description, and base price estimates
+ * - Manage 8 service categories
+ * - Active / disabled toggles
+ * - Edit category name and description
  * - Add new category modal with input validation
  * - Desktop-first layout; stacked cards under md
  */
@@ -22,11 +24,11 @@ export default function AdminServicesView() {
 
   // Edit category modal state
   const [editingCategory, setEditingCategory] = useState(null);
-  const [editFormData, setEditFormData] = useState({ name: '', description: '', base_price_estimate: '' });
+  const [editFormData, setEditFormData] = useState({ name: '', description: '' });
 
   // Add category modal state
   const [addModalOpen, setAddModalOpen] = useState(false);
-  const [newCatData, setNewCatData] = useState({ name: '', description: '', base_price_estimate: '350' });
+  const [newCatData, setNewCatData] = useState({ name: '', description: '' });
 
   const [actionLoading, setActionLoading] = useState(false);
   const [modalError, setModalError] = useState(null);
@@ -62,7 +64,6 @@ export default function AdminServicesView() {
     setEditFormData({
       name: service.name,
       description: service.description,
-      base_price_estimate: String(service.base_price_estimate),
     });
     setModalError(null);
   };
@@ -76,7 +77,7 @@ export default function AdminServicesView() {
       await updateServiceCategory(editingCategory.id, {
         name: editFormData.name,
         description: editFormData.description,
-        base_price_estimate: parseFloat(editFormData.base_price_estimate),
+        base_price_estimate: editingCategory.base_price_estimate || 0,
       });
       setEditingCategory(null);
       setSuccessToast(`Service category updated successfully.`);
@@ -95,9 +96,12 @@ export default function AdminServicesView() {
     setActionLoading(true);
 
     try {
-      await createServiceCategory(newCatData);
+      await createServiceCategory({
+        ...newCatData,
+        base_price_estimate: 0,
+      });
       setAddModalOpen(false);
-      setNewCatData({ name: '', description: '', base_price_estimate: '350' });
+      setNewCatData({ name: '', description: '' });
       setSuccessToast(`New category "${newCatData.name}" created!`);
       setTimeout(() => setSuccessToast(null), 4000);
       await loadServices();
@@ -178,15 +182,6 @@ export default function AdminServicesView() {
                 <p className="text-xs text-[var(--theme-text-soft)] leading-relaxed mb-4 line-clamp-3">
                   {service.description}
                 </p>
-
-                <div className="p-2.5 bg-[var(--theme-surface-sub)] border border-[var(--theme-border)] font-mono text-xs mb-4">
-                  <span className="text-[10px] text-[var(--theme-text-muted)] block uppercase">
-                    BASE ESTIMATE BENCHMARK:
-                  </span>
-                  <span className="text-base font-bold text-[var(--theme-text-main)]">
-                    ₹{service.base_price_estimate?.toFixed(2)}
-                  </span>
-                </div>
               </div>
 
               {/* Actions */}
@@ -271,21 +266,6 @@ export default function AdminServicesView() {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-sans font-bold uppercase tracking-wider text-[var(--theme-text-main)] mb-1">
-                  Base Price Estimate (₹)
-                </label>
-                <input
-                  type="number"
-                  step="10"
-                  min="0"
-                  required
-                  value={editFormData.base_price_estimate}
-                  onChange={(e) => setEditFormData({ ...editFormData, base_price_estimate: e.target.value })}
-                  className="w-full bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] p-2.5 text-xs font-mono text-[var(--theme-text-main)] focus:outline-none focus:ring-2 focus:ring-signal"
-                />
-              </div>
-
               <div className="pt-2 flex flex-col sm:flex-row gap-2">
                 <button
                   type="submit"
@@ -361,21 +341,6 @@ export default function AdminServicesView() {
                   placeholder="Rooftop panel cleaning, inverter troubleshooting, wiring inspection."
                   value={newCatData.description}
                   onChange={(e) => setNewCatData({ ...newCatData, description: e.target.value })}
-                  className="w-full bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] p-2.5 text-xs font-mono text-[var(--theme-text-main)] focus:outline-none focus:ring-2 focus:ring-signal"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-sans font-bold uppercase tracking-wider text-[var(--theme-text-main)] mb-1">
-                  Base Price Estimate (₹)
-                </label>
-                <input
-                  type="number"
-                  step="10"
-                  min="0"
-                  required
-                  value={newCatData.base_price_estimate}
-                  onChange={(e) => setNewCatData({ ...newCatData, base_price_estimate: e.target.value })}
                   className="w-full bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] p-2.5 text-xs font-mono text-[var(--theme-text-main)] focus:outline-none focus:ring-2 focus:ring-signal"
                 />
               </div>
