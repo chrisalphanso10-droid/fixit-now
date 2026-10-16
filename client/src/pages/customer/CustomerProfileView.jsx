@@ -51,7 +51,9 @@ export default function CustomerProfileView({ onProfileUpdated }) {
     setSaving(true);
     try {
       const updated = await updateCustomerProfile({ name, phone, address });
-      setProfile(updated);
+      setName(updated.name || '');
+      setPhone(updated.phone || '');
+      setAddress(updated.address || '');
       setSavedBanner(true);
       if (onProfileUpdated) onProfileUpdated(updated);
       setTimeout(() => setSavedBanner(false), 3000);

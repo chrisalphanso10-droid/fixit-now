@@ -1,9 +1,32 @@
 /**
  * Central API Client for FixIt Now
  * Connects to Express REST API with environment-aware fallback
+ * Automatically attaches JWT authentication header from localStorage.
  */
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
+/**
+ * Helper to build common headers with JWT auth
+ */
+function getAuthHeaders(extraHeaders = {}) {
+  const headers = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+    ...extraHeaders,
+  };
+
+  try {
+    const token = localStorage.getItem('fixit_token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  } catch {
+    // ignore in environments without localStorage
+  }
+
+  return headers;
+}
 
 /**
  * Perform a GET request to the API
@@ -11,15 +34,12 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '';
  * @returns {Promise<any>}
  */
 export async function get(endpoint) {
-  // If VITE_API_URL is configured, use it first; otherwise use relative path
   const primaryUrl = API_BASE_URL ? `${API_BASE_URL}${endpoint}` : endpoint;
 
   try {
     const response = await fetch(primaryUrl, {
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
+      method: 'GET',
+      headers: getAuthHeaders(),
     });
 
     if (!response.ok) {
@@ -29,14 +49,11 @@ export async function get(endpoint) {
 
     return await response.json();
   } catch (err) {
-    // If calling absolute URL failed, attempt fallback to relative path (Vite proxy)
     if (primaryUrl !== endpoint) {
       try {
         const fallbackResponse = await fetch(endpoint, {
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
+          method: 'GET',
+          headers: getAuthHeaders(),
         });
         if (fallbackResponse.ok) {
           return await fallbackResponse.json();
@@ -52,18 +69,15 @@ export async function get(endpoint) {
 /**
  * Perform a POST request to the API
  * @param {string} endpoint
- * @param {object} data
+ * @param {object} [data]
  * @returns {Promise<any>}
  */
-export async function post(endpoint, data) {
+export async function post(endpoint, data = {}) {
   const primaryUrl = API_BASE_URL ? `${API_BASE_URL}${endpoint}` : endpoint;
 
   const response = await fetch(primaryUrl, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -74,3 +88,32 @@ export async function post(endpoint, data) {
 
   return response.json();
 }
+
+/**
+ * Perform a PUT request to the API
+ * @param {string} endpoint
+ * @param {object} [data]
+ * @returns {Promise<any>}
+ */
+export async function put(endpoint, data = {}) {
+  const primaryUrl = API_BASE_URL ? `${API_BASE_URL}${endpoint}` : endpoint;
+
+  const response = await fetch(primaryUrl, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(errorBody.message || `HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export default {
+  get,
+  post,
+  put,
+};

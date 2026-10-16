@@ -7,8 +7,8 @@
  * Strictly enforces FR-A3: No customer or partner modification methods exist here.
  */
 
+import { post } from './api';
 import {
-  mockAdminAccount,
   mockAdminAnalytics,
   mockLiveUsers,
   mockActivityLog,
@@ -38,12 +38,11 @@ const delay = (ms = 200) => new Promise((resolve) => setTimeout(resolve, ms));
 /**
  * -----------------------------------------------------------------------------
  * 1. ADMIN AUTHENTICATION (FR-A1)
- * Login only, no registration. One pre-created account on /admin/login route.
+ * Login only, no registration. One pre-created account on /api/admin/login route.
  * -----------------------------------------------------------------------------
  */
 
 export async function adminLogin(email, password) {
-  await delay(300);
   const cleanEmail = email?.trim().toLowerCase();
   const cleanPassword = password?.trim();
 
@@ -51,26 +50,26 @@ export async function adminLogin(email, password) {
     throw new Error('Please enter both admin email and password.');
   }
 
-  // Pre-created administrator account check
-  if (
-    cleanEmail !== mockAdminAccount.email.toLowerCase() ||
-    cleanPassword !== mockAdminAccount.password
-  ) {
-    throw new Error('Invalid administrator credentials. Access restricted to authorized personnel.');
-  }
+  const res = await post('/api/admin/login', {
+    email: cleanEmail,
+    password: cleanPassword,
+  });
 
   const session = {
-    id: mockAdminAccount.id,
-    name: mockAdminAccount.name,
-    email: mockAdminAccount.email,
+    id: res.user.id,
+    name: res.user.name,
+    email: res.user.email,
     role: 'admin',
-    badge: mockAdminAccount.badge,
-    token: `fn_admin_jwt_${Date.now()}_secure_session`,
+    badge: 'Root Dispatch Controller',
+    token: res.token,
     login_time: new Date().toISOString(),
   };
 
   try {
     localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
+    localStorage.setItem('fixit_token', res.token);
+    localStorage.setItem('fixit_user', JSON.stringify(session));
+    localStorage.setItem('fixit_role', 'admin');
   } catch (e) {
     console.warn('Storage failed for admin session:', e);
   }
@@ -81,7 +80,11 @@ export async function adminLogin(email, password) {
 export function getAdminSession() {
   try {
     const raw = localStorage.getItem(ADMIN_SESSION_KEY);
-    return raw ? JSON.parse(raw) : null;
+    const role = localStorage.getItem('fixit_role');
+    if (raw && role === 'admin') {
+      return JSON.parse(raw);
+    }
+    return null;
   } catch {
     return null;
   }
@@ -90,6 +93,9 @@ export function getAdminSession() {
 export function adminLogout() {
   try {
     localStorage.removeItem(ADMIN_SESSION_KEY);
+    localStorage.removeItem('fixit_token');
+    localStorage.removeItem('fixit_user');
+    localStorage.removeItem('fixit_role');
   } catch (e) {
     console.warn('Could not clear admin session:', e);
   }

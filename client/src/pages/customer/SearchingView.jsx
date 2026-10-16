@@ -182,7 +182,7 @@ export default function SearchingView({
               className="text-xs font-mono font-bold uppercase underline text-[var(--theme-text-muted)] hover:text-signal"
               title="Test the 'All partners busy' error state required by SRS FR-C12"
             >
-              [Test: Simulate "All Partners Busy"]
+              [Test: Simulate &quot;All Partners Busy&quot;]
             </button>
           </div>
         </div>

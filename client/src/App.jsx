@@ -7,11 +7,16 @@ import PartnerAuthView from './pages/partner/PartnerAuthView';
 import AdminPortal from './pages/admin/AdminPortal';
 import AdminLoginView from './pages/admin/AdminLoginView';
 import { checkServerHealth } from './services/healthService';
+import { useAuth } from './context/AuthContext';
 
 export default function App() {
+  const { role, isAuthenticated, loading, logout } = useAuth();
+
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('fixit_theme') || 'light';
   });
+
+  const [authNotice, setAuthNotice] = useState(null);
 
   const [currentView, setCurrentView] = useState(() => {
     const hash = window.location.hash.replace('#/', '').replace('#', '');
@@ -135,7 +140,15 @@ export default function App() {
     localStorage.setItem('fixit_theme', theme);
   }, [theme]);
 
-  // Sync hash changes with view states
+  // Auto-dismiss auth security notice after 5 seconds
+  useEffect(() => {
+    if (authNotice) {
+      const timer = setTimeout(() => setAuthNotice(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [authNotice]);
+
+  // Synchronize hash changes with views
   useEffect(() => {
     const handleHash = () => {
       const hash = window.location.hash.replace('#/', '').replace('#', '');
@@ -189,6 +202,131 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHash);
   }, []);
 
+  // =============================================================================
+  // Role-Based Route Guards & Cross-Portal Access Prevention
+  // Conforms to Task requirement: "all three roles can log in and cannot open each other's pages"
+  // =============================================================================
+  useEffect(() => {
+    if (loading) return;
+
+    const rawHash = window.location.hash.replace('#/', '').replace('#', '');
+
+    // 1. Customer Portal Access Protection
+    const isCustomerPortalRoute =
+      (rawHash.startsWith('customer/') &&
+        !['customer/login', 'customer/register', 'customer/forgot', 'customer/forgot-password'].includes(
+          rawHash
+        )) ||
+      rawHash === 'customer';
+
+    if (isCustomerPortalRoute) {
+      if (!isAuthenticated) {
+        setAuthNotice('! Authentication Required: Please log in as Customer to access your portal.');
+        setCurrentView('customer-auth');
+        setAuthMode('login');
+        window.location.hash = '/customer/login';
+      } else if (role !== 'customer') {
+        const targetDesc = role === 'partner' ? 'Partner Dashboard' : 'Admin Portal';
+        const targetHash = role === 'partner' ? '/partner/dashboard' : '/admin/dashboard';
+        setAuthNotice(
+          `! Access Denied: ${
+            role === 'partner' ? 'Partner' : 'Administrator'
+          } accounts cannot access the Customer Portal. Redirected to ${targetDesc}.`
+        );
+        setCurrentView(role === 'partner' ? 'partner' : 'admin');
+        window.location.hash = targetHash;
+      }
+    }
+
+    // 2. Partner Portal Access Protection
+    const isPartnerPortalRoute =
+      (rawHash.startsWith('partner/') &&
+        !['partner/login', 'partner/register', 'partner/forgot', 'partner/forgot-password'].includes(
+          rawHash
+        )) ||
+      rawHash === 'partner';
+
+    if (isPartnerPortalRoute) {
+      if (!isAuthenticated) {
+        setAuthNotice('! Authentication Required: Please log in as Partner to access the dispatch portal.');
+        setCurrentView('partner-auth');
+        setPartnerAuthMode('login');
+        window.location.hash = '/partner/login';
+      } else if (role !== 'partner') {
+        const targetDesc = role === 'customer' ? 'Customer Dashboard' : 'Admin Portal';
+        const targetHash = role === 'customer' ? '/customer/dashboard' : '/admin/dashboard';
+        setAuthNotice(
+          `! Access Denied: ${
+            role === 'customer' ? 'Customer' : 'Administrator'
+          } accounts cannot access the Partner Portal. Redirected to ${targetDesc}.`
+        );
+        setCurrentView(role === 'customer' ? 'customer' : 'admin');
+        window.location.hash = targetHash;
+      }
+    }
+
+    // 3. Admin Portal Access Protection (SRS FR-A1)
+    const isAdminPortalRoute = (rawHash.startsWith('admin/') && rawHash !== 'admin/login') || rawHash === 'admin';
+
+    if (isAdminPortalRoute) {
+      if (!isAuthenticated) {
+        setAuthNotice('! Authentication Required: Please log in as Administrator.');
+        setCurrentView('admin-login');
+        window.location.hash = '/admin/login';
+      } else if (role !== 'admin') {
+        const targetDesc = role === 'customer' ? 'Customer Dashboard' : 'Partner Dashboard';
+        const targetHash = role === 'customer' ? '/customer/dashboard' : '/partner/dashboard';
+        setAuthNotice(
+          `! Access Denied: ${
+            role === 'customer' ? 'Customer' : 'Partner'
+          } accounts cannot access the Admin Portal. Redirected to ${targetDesc}.`
+        );
+        setCurrentView(role === 'customer' ? 'customer' : 'partner');
+        window.location.hash = targetHash;
+      }
+    }
+
+    // 4. Redirect logged-in users away from auth pages to their respective portals
+    if (['customer/login', 'customer/register'].includes(rawHash)) {
+      if (isAuthenticated) {
+        if (role === 'customer') {
+          setCurrentView('customer');
+          window.location.hash = '/customer/dashboard';
+        } else {
+          setAuthNotice(`! You are currently logged in as ${role}. Please log out to change accounts.`);
+          setCurrentView(role === 'partner' ? 'partner' : 'admin');
+          window.location.hash = role === 'partner' ? '/partner/dashboard' : '/admin/dashboard';
+        }
+      }
+    }
+
+    if (['partner/login', 'partner/register'].includes(rawHash)) {
+      if (isAuthenticated) {
+        if (role === 'partner') {
+          setCurrentView('partner');
+          window.location.hash = '/partner/dashboard';
+        } else {
+          setAuthNotice(`! You are currently logged in as ${role}. Please log out to change accounts.`);
+          setCurrentView(role === 'customer' ? 'customer' : 'admin');
+          window.location.hash = role === 'customer' ? '/customer/dashboard' : '/admin/dashboard';
+        }
+      }
+    }
+
+    if (rawHash === 'admin/login') {
+      if (isAuthenticated) {
+        if (role === 'admin') {
+          setCurrentView('admin');
+          window.location.hash = '/admin/dashboard';
+        } else {
+          setAuthNotice(`! You are currently logged in as ${role}. Please log out to access admin.`);
+          setCurrentView(role === 'customer' ? 'customer' : 'partner');
+          window.location.hash = role === 'customer' ? '/customer/dashboard' : '/partner/dashboard';
+        }
+      }
+    }
+  }, [loading, isAuthenticated, role, currentView]);
+
   const navigateToCustomerPortal = (tab = 'dashboard', service = null) => {
     setPreselectedService(service);
     setCustomerTab(tab);
@@ -237,6 +375,11 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handlePortalLogout = () => {
+    logout();
+    returnToLanding();
+  };
+
   const loadHealth = async () => {
     setLoadingHealth(true);
     try {
@@ -253,8 +396,46 @@ export default function App() {
     loadHealth();
   }, []);
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[var(--theme-bg)] flex items-center justify-center p-4 font-mono text-sm text-[var(--theme-text-main)]">
+        <div className="p-6 bg-paper border-2 border-ink shadow-hard space-y-3 text-center max-w-sm">
+          <div className="w-6 h-6 bg-signal border-2 border-ink rotate-45 mx-auto animate-spin" />
+          <div className="font-bold text-signal uppercase tracking-widest text-xs">
+            FIXIT NOW · SECURITY DISPATCH
+          </div>
+          <div className="text-xs text-muted">
+            Verifying encrypted JWT authentication session...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
+      {/* Role-Based Guard Notification Banner */}
+      {authNotice && (
+        <div
+          role="alert"
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-xl w-[92%] bg-paper border-2 border-signal shadow-hard p-3 font-mono text-xs font-bold text-ink flex items-center justify-between gap-3 animate-bounce"
+        >
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 bg-signal text-ink font-extrabold flex items-center justify-center flex-shrink-0">
+              !
+            </span>
+            <span>{authNotice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAuthNotice(null)}
+            className="text-signal hover:underline uppercase text-[11px] font-bold"
+          >
+            [DISMISS]
+          </button>
+        </div>
+      )}
+
       {currentView === 'landing' && (
         <LandingPage
           theme={theme}
@@ -273,7 +454,7 @@ export default function App() {
           initialTab={customerTab}
           theme={theme}
           setTheme={setTheme}
-          onExitPortal={returnToLanding}
+          onExitPortal={handlePortalLogout}
           preselectedService={preselectedService}
         />
       )}
@@ -312,7 +493,7 @@ export default function App() {
           </div>
 
           <div className="text-center font-mono text-xs text-[var(--theme-text-muted)] py-4">
-            FixIt Now Customer Authentication · Sample Data Mode
+            FixIt Now Customer Authentication · Verified JWT Session
           </div>
         </div>
       )}
@@ -322,7 +503,7 @@ export default function App() {
           initialTab={partnerTab}
           theme={theme}
           setTheme={setTheme}
-          onExitPortal={returnToLanding}
+          onExitPortal={handlePortalLogout}
         />
       )}
 
@@ -367,7 +548,7 @@ export default function App() {
           </div>
 
           <div className="text-center font-mono text-xs text-[var(--theme-text-muted)] py-4">
-            FixIt Now Partner Dispatch &amp; Authentication · Sample Data Mode
+            FixIt Now Partner Dispatch &amp; Authentication · Verified JWT Session
           </div>
         </div>
       )}
@@ -377,7 +558,7 @@ export default function App() {
           initialTab={adminTab}
           theme={theme}
           setTheme={setTheme}
-          onExitPortal={returnToLanding}
+          onExitPortal={handlePortalLogout}
         />
       )}
 
@@ -414,7 +595,7 @@ export default function App() {
           </div>
 
           <div className="text-center font-mono text-xs text-[var(--theme-text-muted)] py-4">
-            FixIt Now Central Administration · Sample Data Mode
+            FixIt Now Central Administration · Verified JWT Session
           </div>
         </div>
       )}

@@ -13,7 +13,6 @@ import {
   mockPartnerRatings,
   mockIncomingJob,
   mockPlans,
-  mockRequests,
 } from '../mockData';
 
 const PARTNER_STORAGE_KEY = 'fixit_current_partner';
@@ -153,7 +152,7 @@ export async function switchDemoPartnerAccount(type) {
  * Toggle Partner Online/Offline status (SRS FR-P8)
  * Only KYC-verified & unexpired partners may go online (FR-M3)
  */
-export async function togglePartnerOnline(partnerId) {
+export async function togglePartnerOnline(_partnerId) {
   await new Promise((resolve) => setTimeout(resolve, 150));
   const current = getActivePartner();
 

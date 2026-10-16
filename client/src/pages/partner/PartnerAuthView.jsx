@@ -5,15 +5,14 @@
  * Conforms to SRS FR-P1, FR-P2, FR-C2, FR-C4 and docs/DESIGN.md.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   partnerLogin,
   partnerRegister,
   sendPartnerForgotPasswordOtp,
   resetPartnerPasswordWithOtp,
 } from '../../services/authService';
-import { switchDemoPartnerAccount } from '../../services/partnerService';
-import { mockServices } from '../../mockData';
+import { getServices } from '../../services/serviceService';
 
 export default function PartnerAuthView({
   initialMode = 'login', // 'login' | 'register' | 'forgot'
@@ -36,7 +35,21 @@ export default function PartnerAuthView({
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   // SRS FR-P1: Partners choose EXACTLY ONE certified service category
-  const [selectedServiceId, setSelectedServiceId] = useState(2); // Default: Plumbing Repairs
+  const [servicesList, setServicesList] = useState([]);
+  const [selectedServiceId, setSelectedServiceId] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    getServices().then((svcs) => {
+      if (isMounted && Array.isArray(svcs) && svcs.length > 0) {
+        setServicesList(svcs);
+        setSelectedServiceId((prev) => prev || svcs[0].id);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Forgot password form state
   const [forgotEmail, setForgotEmail] = useState('rajesh@example.com');
@@ -51,15 +64,24 @@ export default function PartnerAuthView({
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
 
-  // Quick 1-click demo logins
+  // Quick 1-click demo logins using real seeded partner accounts
   const handleDemoLogin = async (scenarioType) => {
     setLoading(true);
     setError(null);
     try {
-      const partner = await switchDemoPartnerAccount(scenarioType);
+      let email = 'rajesh@example.com';
+      let password = 'Partner@2026';
+      if (scenarioType === 'pending_kyc') {
+        email = 'sunil.carpenter@fixitnow.local';
+      } else if (scenarioType === 'rejected_kyc') {
+        email = 'vikram.appliance@fixitnow.local';
+      } else if (scenarioType === 'warning_plan') {
+        email = 'ramesh.electric@fixitnow.local';
+      }
+      const partner = await partnerLogin(email, password);
       if (onSuccess) onSuccess(partner);
     } catch (err) {
-      setError(`! ${err.message || 'Demo switch failed.'}`);
+      setError(`! ${err.message || 'Demo login failed.'}`);
     } finally {
       setLoading(false);
     }
@@ -516,7 +538,7 @@ export default function PartnerAuthView({
             </p>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {mockServices.map((service) => {
+              {servicesList.map((service) => {
                 const isSelected = selectedServiceId === service.id;
                 return (
                   <button

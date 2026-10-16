@@ -58,6 +58,46 @@ async function runSeed() {
       [adminEmail, adminPasswordHash]
     );
 
+    // Also seed admin@fixitnow.local (Admin@2026) for local UI autofill convenience
+    const localAdminHash = await bcrypt.hash('Admin@2026', 10);
+    await client.query(
+      `
+      INSERT INTO admins (email, password_hash, name, updated_at)
+      VALUES ('admin@fixitnow.local', $1, 'FixIt Now Central Controller', CURRENT_TIMESTAMP)
+      ON CONFLICT (email)
+      DO UPDATE SET
+        password_hash = EXCLUDED.password_hash,
+        updated_at = CURRENT_TIMESTAMP;
+      `,
+      [localAdminHash]
+    );
+
+    // Seed Demo Customer (Ananya Rao)
+    console.log('Seeding Demo Customer: ananya@example.com');
+    const customerPasswordHash = await bcrypt.hash('FixIt@2026', 10);
+    await client.query(
+      `
+      INSERT INTO customers (name, email, password_hash, phone, address, latitude, longitude)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (email)
+      DO UPDATE SET
+        password_hash = EXCLUDED.password_hash,
+        name = EXCLUDED.name,
+        phone = EXCLUDED.phone,
+        address = EXCLUDED.address;
+      `,
+      [
+        'Ananya Rao',
+        'ananya@example.com',
+        customerPasswordHash,
+        '+91 98765 43210',
+        '42, 3rd Cross, Indiranagar, Bengaluru, 560038',
+        12.9784,
+        77.6408,
+      ]
+    );
+
+
     // =========================================================================
     // 2. 5 SERVICE CATEGORIES
     // =========================================================================

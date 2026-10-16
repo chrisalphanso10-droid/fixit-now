@@ -1,20 +1,25 @@
 /**
  * Service Category Data Service
- * Loads trade services from mock data (or backend API once Phase 1/5 is completed).
+ * Loads trade services from backend API with fallback.
+ * Conforms to docs/PLAN.md and docs/SRS.md.
  */
+import { get } from './api.js';
 import { mockServices, mockFaqs } from '../mockData/index.js';
 
 /**
  * Fetch all active services
- * @returns {Promise<Array<{ id: number, name: string, slug: string, description: string, base_price_estimate: number, active: boolean }>>}
+ * @returns {Promise<Array<{ id: number, name: string, slug: string, description: string, active: boolean }>>}
  */
 export async function getServices() {
-  // Simulate network dispatch with sample data per PLAN.md
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(mockServices.filter((s) => s.active));
-    }, 50);
-  });
+  try {
+    const res = await get('/api/services');
+    if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
+      return res.data;
+    }
+  } catch (err) {
+    console.warn('[Services Fetch Fallback]:', err.message);
+  }
+  return mockServices.filter((s) => s.active);
 }
 
 /**
@@ -28,3 +33,8 @@ export async function getLandingFaqs() {
     }, 50);
   });
 }
+
+export default {
+  getServices,
+  getLandingFaqs,
+};

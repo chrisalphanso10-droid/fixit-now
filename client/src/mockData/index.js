@@ -893,15 +893,6 @@ export const mockIncomingJob = {
   created_at: '2026-10-16T11:45:00Z',
 };
 
-export const mockAdminAccount = {
-  id: 1,
-  name: 'FixIt Now Central Controller',
-  email: 'admin@fixitnow.local',
-  password: 'Admin@2026',
-  role: 'admin',
-  badge: 'Root Dispatch Controller',
-  last_login: '2026-10-16T12:00:00Z',
-};
 
 export const mockLiveUsers = {
   online_partners_count: 14,
