@@ -159,28 +159,31 @@ export default function ActiveJobView({
         </div>
 
         {/* 5-Step Status Ladder */}
-        <div className="grid grid-cols-5 border-2 border-[var(--theme-border)] bg-[var(--theme-bg)] p-1 gap-1 font-mono text-center">
-          {statusLadder.map((step, idx) => {
-            const stepNum = idx + 1;
-            const isCompleted = stepNum < currentStepIndex;
-            const isCurrent = stepNum === currentStepIndex;
+        <div className="overflow-x-auto pb-1">
+          <div className="grid grid-cols-5 min-w-[320px] sm:min-w-0 border-2 border-[var(--theme-border)] bg-[var(--theme-bg)] p-1 gap-1 font-mono text-center">
+            {statusLadder.map((step, idx) => {
+              const stepNum = idx + 1;
+              const isCompleted = stepNum < currentStepIndex;
+              const isCurrent = stepNum === currentStepIndex;
 
-            return (
-              <div
-                key={step.key}
-                className={`py-2 px-1 text-[10px] sm:text-xs font-bold uppercase transition-colors ${
-                  isCurrent
-                    ? 'bg-signal text-ink shadow-hard-sm'
-                    : isCompleted
-                    ? 'bg-done text-paper'
-                    : 'text-[var(--theme-text-muted)]'
-                }`}
-              >
-                <div className="block sm:inline mr-1">{isCompleted ? '✓' : `${step.num}.`}</div>
-                <span>{step.label}</span>
-              </div>
-            );
-          })}
+              return (
+                <div
+                  key={step.key}
+                  className={`py-1.5 sm:py-2 px-0.5 sm:px-1 text-[9px] sm:text-xs font-bold uppercase transition-colors truncate ${
+                    isCurrent
+                      ? 'bg-signal text-ink shadow-hard-sm'
+                      : isCompleted
+                      ? 'bg-done text-paper'
+                      : 'text-[var(--theme-text-muted)]'
+                  }`}
+                  title={`${step.num}. ${step.label}`}
+                >
+                  <div className="block sm:inline mr-0.5 sm:mr-1">{isCompleted ? '✓' : `${step.num}.`}</div>
+                  <span>{step.label}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 

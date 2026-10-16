@@ -140,22 +140,22 @@ export default function PartnerLayout({
       {/* ============================================================== */}
       {/* 1. TOP HEADER                                                  */}
       {/* ============================================================== */}
-      <header className="sticky top-0 z-40 border-b-2 border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 py-2.5 sm:px-8 transition-colors duration-150">
-        <div className="max-w-[1440px] mx-auto flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-40 border-b-2 border-[var(--theme-border)] bg-[var(--theme-surface)] px-2.5 sm:px-8 py-2 sm:py-2.5 transition-colors duration-150">
+        <div className="max-w-[1440px] mx-auto flex items-center justify-between gap-1.5 sm:gap-3">
           {/* Logo & Portal Stamp */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <a
               href="#/partner/dashboard"
               onClick={(e) => {
                 e.preventDefault();
                 onSelectTab('dashboard');
               }}
-              className="flex items-center gap-2 group text-decoration-none"
+              className="flex items-center gap-1.5 sm:gap-2 group text-decoration-none"
             >
-              <div className="w-8 h-8 bg-ink border-2 border-[var(--theme-border)] flex items-center justify-center shrink-0">
-                <span className="w-3.5 h-3.5 bg-signal rotate-45 inline-block group-hover:rotate-90 transition-transform" />
+              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-ink border-2 border-[var(--theme-border)] flex items-center justify-center shrink-0">
+                <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 bg-signal rotate-45 inline-block group-hover:rotate-90 transition-transform" />
               </div>
-              <span className="font-display font-extrabold text-xl tracking-tight leading-none text-[var(--theme-text-main)]">
+              <span className="font-display font-extrabold text-lg sm:text-xl tracking-tight leading-none text-[var(--theme-text-main)]">
                 FixIt <span className="text-signal">Now</span>
               </span>
             </a>
@@ -165,13 +165,13 @@ export default function PartnerLayout({
             </span>
           </div>
 
-          {/* Center: Online/Offline Switcher Button (Min 44px target) */}
-          <div className="flex items-center gap-2">
+          {/* Center: Online/Offline Switcher Button (Min 40px/44px target) */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={onToggleOnline}
               disabled={!isKycVerified || isExpired}
-              className={`min-h-[44px] px-3.5 sm:px-4 py-1.5 border-2 border-[var(--theme-border)] flex items-center gap-2.5 font-mono text-xs font-bold uppercase tracking-wider transition-all ${
+              className={`min-h-[40px] sm:min-h-[44px] px-2.5 sm:px-4 py-1 sm:py-1.5 border-2 border-[var(--theme-border)] flex items-center gap-1.5 sm:gap-2.5 font-mono text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all ${
                 online
                   ? 'bg-done text-paper shadow-hard hover:opacity-95'
                   : 'bg-[var(--theme-bg)] text-[var(--theme-text-soft)] hover:text-[var(--theme-text-main)]'
@@ -187,14 +187,14 @@ export default function PartnerLayout({
               }
             >
               <span
-                className={`w-2.5 h-2.5 rounded-full inline-block ${
+                className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full inline-block ${
                   online ? 'bg-paper animate-pulse' : 'bg-concrete border border-ink'
                 }`}
               />
-              <span className="hidden xs:inline">
+              <span className="hidden sm:inline">
                 {online ? 'ONLINE · RADAR ACTIVE' : 'OFFLINE · PAUSED'}
               </span>
-              <span className="xs:hidden">
+              <span className="sm:hidden">
                 {online ? 'ONLINE' : 'OFFLINE'}
               </span>
             </button>
@@ -207,32 +207,32 @@ export default function PartnerLayout({
                 className="hidden md:inline-flex min-h-[44px] px-3 py-1.5 border-2 border-signal bg-signal/15 text-signal hover:bg-signal hover:text-ink font-mono text-xs font-bold uppercase tracking-wider items-center gap-1.5 transition-colors"
                 title="Simulate incoming customer repair request (FR-P7)"
               >
-                <span>⚡ Simulate Job</span>
+                <span>[+] Simulate Job</span>
               </button>
             )}
           </div>
 
           {/* Right Header Actions */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Demo State Switcher (Crucial for grading/testing all 6 states) */}
+          <div className="flex items-center gap-1.5 sm:gap-3">
+            {/* Demo State Switcher */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setDemoMenuOpen(!demoMenuOpen)}
-                className="min-h-[44px] px-2.5 sm:px-3 py-1.5 border-2 border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text-main)] font-mono text-xs font-bold flex items-center gap-1.5 hover:bg-signal/20 transition-colors"
+                className="min-h-[40px] sm:min-h-[44px] px-2 sm:px-3 py-1 sm:py-1.5 border-2 border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text-main)] font-mono text-[11px] sm:text-xs font-bold flex items-center gap-1 hover:bg-signal/20 transition-colors"
                 title="Switch demo account scenario for testing"
               >
-                <span className="hidden sm:inline">STATE:</span>
-                <span className="text-signal truncate max-w-[100px] sm:max-w-none">
+                <span className="hidden md:inline">STATE:</span>
+                <span className="text-signal truncate max-w-[70px] sm:max-w-none">
                   {partner?.kyc_status === 'pending'
                     ? 'Pending KYC'
                     : partner?.kyc_status === 'rejected'
                     ? 'Rejected KYC'
                     : isExpired
-                    ? 'Plan Expired'
+                    ? 'Expired'
                     : isExpiringSoon
-                    ? 'Plan 2d Left'
-                    : 'Verified Pro'}
+                    ? '2d Left'
+                    : 'Verified'}
                 </span>
                 <span className="text-[10px]" aria-hidden="true">▾</span>
               </button>
@@ -341,7 +341,7 @@ export default function PartnerLayout({
             <button
               type="button"
               onClick={onExitPortal}
-              className="min-h-[44px] px-3 py-1.5 border-2 border-[var(--theme-border)] font-mono text-xs font-bold uppercase hover:bg-concrete transition-colors"
+              className="min-h-[40px] sm:min-h-[44px] px-2.5 sm:px-3 py-1 sm:py-1.5 border-2 border-[var(--theme-border)] font-mono text-[11px] sm:text-xs font-bold uppercase hover:bg-concrete transition-colors"
               title="Exit Partner Portal"
             >
               Exit
@@ -354,10 +354,10 @@ export default function PartnerLayout({
       {/* 2. PLAN EXPIRY NOTICES (SRS FR-P15 & BR-4)                     */}
       {/* ============================================================== */}
       {isExpired && (
-        <div className="bg-ink text-paper border-b-2 border-signal p-3 text-center font-mono text-xs font-bold flex items-center justify-center gap-3">
-          <span className="text-signal text-base">⚠️</span>
+        <div className="bg-ink text-paper border-b-2 border-signal p-3 text-center font-mono text-xs font-bold flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3">
+          <span className="text-signal font-bold">[DISPATCH LOCKOUT]</span>
           <span>
-            DISPATCH LOCKOUT: Your subscription plan has expired. You cannot go online or accept requests.
+            Your subscription plan has expired. You cannot go online or accept requests.
           </span>
           <button
             type="button"
@@ -370,9 +370,9 @@ export default function PartnerLayout({
       )}
 
       {!isExpired && isExpiringSoon && (
-        <div className="bg-signal text-ink border-b-2 border-ink p-2.5 text-center font-mono text-xs font-bold flex items-center justify-center gap-3">
+        <div className="bg-signal text-ink border-b-2 border-ink p-2.5 text-center font-mono text-xs font-bold flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3">
           <span>
-            ⏳ SUBSCRIPTION WARNING: Your plan expires in {daysRemaining} days. Renew in advance to maintain uninterrupted dispatch.
+            [EXPIRY ALERT] SUBSCRIPTION WARNING: Your plan expires in {daysRemaining} days. Renew in advance to maintain uninterrupted dispatch.
           </span>
           <button
             type="button"

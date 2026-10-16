@@ -267,6 +267,43 @@ async function runSeed() {
         badge: 'OEM Certified Technician',
         vehicle: 'Honda Activa (KA-05-MN-5567)',
         plan_name: 'quarterly',
+        subscription_status: 'active',
+      },
+      {
+        name: 'Dinesh Nair',
+        email: 'dinesh.mason@fixitnow.local',
+        phone: '+91 98110 33211',
+        address: '9, Cambridge Road, Ulsoor, Bengaluru',
+        service_slug: 'plumber',
+        online: false,
+        latitude: 12.972,
+        longitude: 77.641,
+        kyc_status: 'verified',
+        rejection_reason: null,
+        rating: 4.79,
+        total_jobs: 62,
+        badge: 'Civil Tile & Masonry Pro',
+        vehicle: 'Bajaj CT 100 (KA-05-YZ-9012)',
+        plan_name: 'quarterly',
+        subscription_status: 'expired',
+      },
+      {
+        name: 'Mohan Sharma',
+        email: 'naveen.lock@fixitnow.local',
+        phone: '+91 97411 44556',
+        address: '11, CMH Road, Stage 1, Indiranagar, Bengaluru',
+        service_slug: 'electrician',
+        online: false,
+        latitude: 12.977,
+        longitude: 77.636,
+        kyc_status: 'pending',
+        rejection_reason: null,
+        rating: 4.88,
+        total_jobs: 0,
+        badge: 'Certified Apprentice Technician',
+        vehicle: 'Bajaj Pulsar 150 (KA-03-LK-9122)',
+        plan_name: null,
+        subscription_status: null,
       },
     ];
 
@@ -319,25 +356,33 @@ async function runSeed() {
       );
 
       const partnerId = partnerRes.rows[0].id;
-      const planId = planMap[p.plan_name];
 
-      // Seed an active subscription for each demo partner
-      await client.query(
-        `
-        INSERT INTO subscriptions (
-          partner_id, plan_id, price_paid, start_date, end_date, status
-        )
-        VALUES (
-          $1, $2,
-          (SELECT price FROM plans WHERE id = $2),
-          CURRENT_TIMESTAMP - INTERVAL '15 days',
-          CURRENT_TIMESTAMP + INTERVAL '75 days',
-          'active'
-        )
-        ON CONFLICT DO NOTHING;
-        `,
-        [partnerId, planId]
-      );
+      // Seed subscription if configured
+      if (p.plan_name && planMap[p.plan_name]) {
+        const planId = planMap[p.plan_name];
+        const isExp = p.subscription_status === 'expired';
+
+        await client.query(
+          `
+          INSERT INTO subscriptions (
+            partner_id, plan_id, price_paid, start_date, end_date, status
+          )
+          VALUES (
+            $1, $2,
+            (SELECT price FROM plans WHERE id = $2),
+            $3, $4, $5
+          )
+          ON CONFLICT DO NOTHING;
+          `,
+          [
+            partnerId,
+            planId,
+            isExp ? new Date(Date.now() - 120 * 86400000) : new Date(Date.now() - 15 * 86400000),
+            isExp ? new Date(Date.now() - 30 * 86400000) : new Date(Date.now() + 75 * 86400000),
+            isExp ? 'expired' : 'active',
+          ]
+        );
+      }
 
       // Seed a sample KYC document record
       const reviewerNotes =

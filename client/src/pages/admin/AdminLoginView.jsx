@@ -20,13 +20,18 @@ export default function AdminLoginView({ onSuccess, onCancel }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setError('Please provide a valid administrator email address.');
+      return;
+    }
     setError(null);
     setLoading(true);
 
     try {
       const session = authLoginAdmin
-        ? await authLoginAdmin(email, password)
-        : await adminLogin(email, password);
+        ? await authLoginAdmin(cleanEmail, password)
+        : await adminLogin(cleanEmail, password);
       onSuccess(session);
     } catch (err) {
       setError(err.message || 'Failed to authenticate administrator account.');
@@ -42,14 +47,14 @@ export default function AdminLoginView({ onSuccess, onCancel }) {
   };
 
   return (
-    <div className="bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] p-6 sm:p-8 shadow-hard relative">
+    <div className="bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] p-5 sm:p-8 shadow-hard relative">
       {/* Ticket Header */}
-      <div className="flex items-center justify-between border-b-2 border-[var(--theme-border)] pb-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b-2 border-[var(--theme-border)] pb-4 mb-6">
         <span className="font-mono text-xs font-bold uppercase tracking-widest text-signal flex items-center gap-2">
-          <span className="w-2.5 h-2.5 bg-signal border border-[var(--theme-border)] rotate-45 inline-block" />
+          <span className="w-2.5 h-2.5 bg-signal border border-[var(--theme-border)] rotate-45 inline-block shrink-0" />
           ADMIN DISPATCH ACCESS · FR-A1
         </span>
-        <span className="stamp-badge text-[10px] bg-ink text-paper border-ink">
+        <span className="stamp-badge text-[10px] bg-ink text-paper border-ink self-start sm:self-auto">
           RESTRICTED
         </span>
       </div>
@@ -66,14 +71,14 @@ export default function AdminLoginView({ onSuccess, onCancel }) {
 
       {/* Demo Credentials Box */}
       <div className="p-3.5 bg-[var(--theme-surface-sub)] border-2 border-dashed border-[var(--theme-border)] mb-6 font-mono text-xs">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2">
           <span className="font-bold text-[var(--theme-text-main)] uppercase tracking-wider">
             PRE-CONFIGURED ROOT ACCOUNT:
           </span>
           <button
             type="button"
             onClick={handleFillDemo}
-            className="text-signal font-bold hover:underline underline-offset-2"
+            className="text-signal font-bold hover:underline underline-offset-2 self-start sm:self-auto"
           >
             [AUTO-FILL]
           </button>

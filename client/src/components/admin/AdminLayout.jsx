@@ -11,16 +11,125 @@
 import { useState } from 'react';
 
 const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Operations & Charts', icon: '📊', short: 'Overview' },
-  { id: 'kyc', label: 'KYC Verification', icon: '🪪', short: 'KYC', hasBadge: true },
-  { id: 'plans', label: 'Plans & Pricing', icon: '💳', short: 'Plans' },
-  { id: 'services', label: 'Service Categories', icon: '🛠️', short: 'Services' },
-  { id: 'customers', label: 'Customers (Read-Only)', icon: '👥', short: 'Customers' },
-  { id: 'partners', label: 'Partners (Read-Only)', icon: '👷', short: 'Partners' },
-  { id: 'requests', label: 'Service Requests', icon: '📋', short: 'Requests' },
-  { id: 'subscriptions', label: 'Subscriptions', icon: '🎟️', short: 'Subscriptions' },
-  { id: 'ratings', label: 'Ratings & Reviews', icon: '⭐', short: 'Reviews' },
-  { id: 'activity-log', label: 'Activity Audit Log', icon: '📜', short: 'Audit' },
+  {
+    id: 'dashboard',
+    label: 'Operations & Charts',
+    short: 'Overview',
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-none stroke-current stroke-2 shrink-0" aria-hidden="true">
+        <line x1="18" y1="20" x2="18" y2="10" />
+        <line x1="12" y1="20" x2="12" y2="4" />
+        <line x1="6" y1="20" x2="6" y2="14" />
+      </svg>
+    ),
+  },
+  {
+    id: 'kyc',
+    label: 'KYC Verification',
+    short: 'KYC',
+    hasBadge: true,
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-none stroke-current stroke-2 shrink-0" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="16" rx="0" />
+        <circle cx="9" cy="10" r="2" />
+        <line x1="14" y1="9" x2="18" y2="9" />
+        <line x1="14" y1="13" x2="18" y2="13" />
+      </svg>
+    ),
+  },
+  {
+    id: 'plans',
+    label: 'Plans & Pricing',
+    short: 'Plans',
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-none stroke-current stroke-2 shrink-0" aria-hidden="true">
+        <rect x="2" y="5" width="20" height="14" rx="0" />
+        <line x1="2" y1="10" x2="22" y2="10" />
+      </svg>
+    ),
+  },
+  {
+    id: 'services',
+    label: 'Service Categories',
+    short: 'Services',
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-none stroke-current stroke-2 shrink-0" aria-hidden="true">
+        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'customers',
+    label: 'Customers (Read-Only)',
+    short: 'Customers',
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-none stroke-current stroke-2 shrink-0" aria-hidden="true">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      </svg>
+    ),
+  },
+  {
+    id: 'partners',
+    label: 'Partners (Read-Only)',
+    short: 'Partners',
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-none stroke-current stroke-2 shrink-0" aria-hidden="true">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <line x1="19" y1="8" x2="19" y2="14" />
+        <line x1="22" y1="11" x2="16" y2="11" />
+      </svg>
+    ),
+  },
+  {
+    id: 'requests',
+    label: 'Service Requests',
+    short: 'Requests',
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-none stroke-current stroke-2 shrink-0" aria-hidden="true">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+      </svg>
+    ),
+  },
+  {
+    id: 'subscriptions',
+    label: 'Subscriptions',
+    short: 'Subscriptions',
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-none stroke-current stroke-2 shrink-0" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="16" rx="0" />
+        <line x1="3" y1="10" x2="21" y2="10" />
+        <line x1="7" y1="15" x2="11" y2="15" />
+      </svg>
+    ),
+  },
+  {
+    id: 'ratings',
+    label: 'Ratings & Reviews',
+    short: 'Reviews',
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-none stroke-current stroke-2 shrink-0" aria-hidden="true">
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+      </svg>
+    ),
+  },
+  {
+    id: 'activity-log',
+    label: 'Activity Audit Log',
+    short: 'Audit',
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-none stroke-current stroke-2 shrink-0" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
+    ),
+  },
 ];
 
 export default function AdminLayout({

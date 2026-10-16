@@ -78,6 +78,10 @@ export default function PartnerAuthView({
         email = 'vikram.appliance@fixitnow.local';
       } else if (scenarioType === 'warning_plan') {
         email = 'ramesh.electric@fixitnow.local';
+      } else if (scenarioType === 'expired_plan') {
+        email = 'dinesh.mason@fixitnow.local';
+      } else if (scenarioType === 'new_partner') {
+        email = 'naveen.lock@fixitnow.local';
       }
       const partner = authLoginPartner
         ? await authLoginPartner(email, password)
@@ -93,6 +97,15 @@ export default function PartnerAuthView({
   // Submit Login
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
+    const cleanId = loginEmail.trim();
+    if (!cleanId) {
+      setError('! Please enter your registered partner email or phone number.');
+      return;
+    }
+    if (cleanId.includes('@') && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanId)) {
+      setError('! Please enter a valid email address.');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -110,28 +123,47 @@ export default function PartnerAuthView({
   // Submit Registration (SRS FR-P1 & FR-C2)
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
+    if (!regName.trim() || !regEmail.trim() || !regPhone.trim() || !regAddress.trim() || !regPassword) {
+      setError('! All registration fields are required.');
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim())) {
+      setError('! Please enter a valid email address.');
+      return;
+    }
+
+    const cleanPhoneDigits = regPhone.trim().replace(/\D/g, '');
+    if (cleanPhoneDigits.length < 10) {
+      setError('! Please enter a valid phone number (at least 10 digits).');
+      return;
+    }
+
+    if (regAddress.trim().length < 5) {
+      setError('! Please enter a complete operating address (at least 5 characters).');
+      return;
+    }
 
     if (regPassword !== regConfirmPassword) {
       setError('! Password and Confirm Password do not match.');
-      setLoading(false);
       return;
     }
 
     if (!selectedServiceId) {
       setError('! You must select exactly one certified service trade category (SRS FR-P1).');
-      setLoading(false);
       return;
     }
 
+    setLoading(true);
+    setError(null);
+
     try {
       const regData = {
-        name: regName,
-        email: regEmail,
-        phone: regPhone,
-        address: regAddress,
-        vehicle: regVehicle,
+        name: regName.trim(),
+        email: regEmail.trim(),
+        phone: regPhone.trim(),
+        address: regAddress.trim(),
+        vehicle: regVehicle?.trim() || 'Two-Wheeler',
         service_id: Number(selectedServiceId),
         password: regPassword,
       };
@@ -153,6 +185,10 @@ export default function PartnerAuthView({
   // Step 1: Send Forgot Password OTP
   const handleSendOtp = async (e) => {
     e.preventDefault();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(forgotEmail.trim())) {
+      setError('! Please enter a valid partner email address.');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -169,14 +205,16 @@ export default function PartnerAuthView({
   // Step 2: Reset Password with OTP
   const handleResetPassword = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    if (newPassword !== confirmNewPassword) {
-      setError('! Passwords do not match.');
-      setLoading(false);
+    if (!/^\d{6}$/.test(forgotOtp.trim())) {
+      setError('! Verification code must be exactly 6 numeric digits.');
       return;
     }
+    if (newPassword !== confirmNewPassword) {
+      setError('! Passwords do not match.');
+      return;
+    }
+    setLoading(true);
+    setError(null);
 
     try {
       const res = await resetPartnerPasswordWithOtp(forgotEmail, forgotOtp, newPassword);
@@ -200,18 +238,18 @@ export default function PartnerAuthView({
 
   return (
     <div
-      className="bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] p-6 sm:p-8 shadow-hard text-[var(--theme-text-main)] transition-colors duration-150"
+      className="bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] p-5 sm:p-8 shadow-hard text-[var(--theme-text-main)] transition-colors duration-150"
       style={{ borderRadius: 0 }}
     >
       {/* Header Banner */}
-      <div className="flex items-center justify-between border-b-2 border-[var(--theme-border)] pb-3 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b-2 border-[var(--theme-border)] pb-3 mb-6">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 bg-signal inline-block" />
           <span className="font-mono text-xs font-bold uppercase tracking-widest text-signal">
             PARTNER WORK ORDER DISPATCH
           </span>
         </div>
-        <span className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text-soft)] px-2 py-0.5 font-mono text-[11px] font-bold">
+        <span className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text-soft)] px-2 py-0.5 font-mono text-[11px] font-bold self-start sm:self-auto">
           0% COMMISSION
         </span>
       </div>
@@ -530,12 +568,12 @@ export default function PartnerAuthView({
           {/* ============================================================== */}
           {/* SRS FR-P1: EXACTLY ONE CERTIFIED TRADE SELECTION                */}
           {/* ============================================================== */}
-          <div className="border-2 border-[var(--theme-border)] p-4 bg-[var(--theme-bg)]">
-            <div className="flex items-center justify-between mb-2">
+          <div className="border-2 border-[var(--theme-border)] p-3 sm:p-4 bg-[var(--theme-bg)]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-2">
               <span className="font-mono text-xs font-bold uppercase tracking-wider text-[var(--theme-text-main)]">
                 Select Your Certified Trade <span className="text-signal">*</span>
               </span>
-              <span className="font-mono text-[10px] bg-ink text-paper px-2 py-0.5 font-bold">
+              <span className="font-mono text-[10px] bg-ink text-paper px-2 py-0.5 font-bold self-start sm:self-auto">
                 SRS FR-P1: EXACTLY 1 TRADE
               </span>
             </div>

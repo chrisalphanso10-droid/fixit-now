@@ -20,7 +20,6 @@ export default function CustomerAuthView({
 }) {
   const { loginCustomer: authLoginCustomer, registerCustomer: authRegisterCustomer } = useAuth() || {};
   const [mode, setMode] = useState(initialMode); // 'login' | 'register' | 'forgot'
-  const [showPartnerNotice, setShowPartnerNotice] = useState(false);
 
   // Login state
   const [loginEmail, setLoginEmail] = useState('ananya@example.com');
@@ -56,6 +55,10 @@ export default function CustomerAuthView({
   // Submit Login (SRS FR-C3)
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail.trim())) {
+      setError('! Please enter a valid email address.');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -73,6 +76,23 @@ export default function CustomerAuthView({
   // Submit Registration (SRS FR-C1 & FR-C2)
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
+    if (!regName.trim() || !regEmail.trim() || !regPhone.trim() || !regAddress.trim() || !regPassword) {
+      setError('! All registration fields are required.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim())) {
+      setError('! Please enter a valid email address.');
+      return;
+    }
+    const cleanPhoneDigits = regPhone.trim().replace(/\D/g, '');
+    if (cleanPhoneDigits.length < 10) {
+      setError('! Please enter a valid phone number (at least 10 digits).');
+      return;
+    }
+    if (regAddress.trim().length < 5) {
+      setError('! Please enter a complete service address (at least 5 characters).');
+      return;
+    }
     if (regPassword !== regConfirmPassword) {
       setError('! Passwords do not match.');
       return;
@@ -81,10 +101,10 @@ export default function CustomerAuthView({
     setError(null);
     try {
       const regData = {
-        name: regName,
-        email: regEmail,
-        phone: regPhone,
-        address: regAddress,
+        name: regName.trim(),
+        email: regEmail.trim(),
+        phone: regPhone.trim(),
+        address: regAddress.trim(),
         password: regPassword,
       };
       const user = authRegisterCustomer
@@ -101,6 +121,10 @@ export default function CustomerAuthView({
   // Submit Forgot Password Step 1: Send OTP (SRS FR-C4)
   const handleSendOtp = async (e) => {
     e.preventDefault();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(forgotEmail.trim())) {
+      setError('! Please enter a valid email address.');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -117,6 +141,10 @@ export default function CustomerAuthView({
   // Submit Forgot Password Step 2: Reset Password (SRS FR-C4)
   const handleResetPassword = async (e) => {
     e.preventDefault();
+    if (!/^\d{6}$/.test(forgotOtp.trim())) {
+      setError('! Verification code must be exactly 6 numeric digits.');
+      return;
+    }
     if (newPassword !== confirmNewPassword) {
       setError('! Passwords do not match.');
       return;
@@ -165,14 +193,16 @@ export default function CustomerAuthView({
         </div>
 
         {/* Role Helper Switcher */}
-        <div className="bg-concrete border border-ink p-2.5 flex items-center justify-between text-xs font-mono">
+        <div className="bg-concrete border border-ink p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
           <span className="text-soft">
             {mode === 'login' ? 'Are you a certified tradesperson?' : 'Want to offer repair services?'}
           </span>
           <button
             type="button"
-            onClick={() => setShowPartnerNotice(true)}
-            className="font-bold underline text-ink hover:text-signal transition-colors ml-2 shrink-0"
+            onClick={() => {
+              window.location.hash = mode === 'login' ? '/partner/login' : '/partner/register';
+            }}
+            className="font-bold underline text-ink hover:text-signal transition-colors shrink-0 text-left sm:text-right"
           >
             {mode === 'login' ? 'Partner Login →' : 'Partner Sign up →'}
           </button>
@@ -250,9 +280,10 @@ export default function CustomerAuthView({
             <button
               type="button"
               onClick={handleAutofillDemo}
-              className="w-full py-1.5 border border-dashed border-ink font-mono text-xs text-soft hover:bg-concrete transition-colors"
+              className="w-full py-2 px-2 border border-dashed border-ink font-mono text-xs text-soft hover:bg-concrete transition-colors truncate"
+              title="Fill demo customer credentials"
             >
-              ⚡ Fill Demo Credentials (ananya@example.com)
+              [DEMO] Fill: ananya@example.com
             </button>
 
             <div className="pt-4 border-t-2 border-dashed border-ink text-center font-mono text-xs">
@@ -516,98 +547,6 @@ export default function CustomerAuthView({
           </div>
         )}
       </div>
-
-      {/* Partner Notice Modal */}
-      {showPartnerNotice && (
-        <div
-          className="fixed inset-0 z-50 bg-ink/75 flex items-center justify-center p-4 overflow-y-auto backdrop-blur-xs"
-          role="dialog"
-          aria-modal="true"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowPartnerNotice(false);
-          }}
-        >
-          <div
-            className="bg-paper border-2 border-ink p-6 sm:p-8 max-w-lg w-full shadow-hard relative my-auto text-ink"
-            style={{ borderRadius: 0 }}
-          >
-            <div className="flex items-center justify-between border-b-2 border-ink pb-4 mb-5 font-mono text-xs">
-              <span className="uppercase tracking-widest text-signal font-bold">
-                PARTNER WORK ORDER DISPATCH
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowPartnerNotice(false)}
-                className="w-8 h-8 border-2 border-ink bg-concrete font-bold text-ink hover:bg-signal flex items-center justify-center transition-colors"
-                aria-label="Close dialog"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-display font-extrabold text-2xl text-ink">
-                  Partner Portal Access
-                </h3>
-                <span className="px-2 py-0.5 border border-ink bg-concrete font-mono text-[10px] font-bold">
-                  PROMPT 3
-                </span>
-              </div>
-
-              <p className="text-sm text-soft leading-relaxed">
-                FixIt Now operates on a verified, flat-subscription model with <strong>0% commission</strong>.
-                Partners keep 100% of customer repair charges settled directly on-site.
-              </p>
-
-              <div className="border border-ink bg-concrete p-3 space-y-2 font-mono text-xs">
-                <span className="font-bold text-ink block border-b border-ink/30 pb-1">
-                  SRS SPECIFICATION HIGHLIGHTS:
-                </span>
-                <div className="flex items-start gap-1.5">
-                  <span className="text-signal font-bold">•</span>
-                  <span><strong>1 Trade per Partner:</strong> Select exactly one certified service.</span>
-                </div>
-                <div className="flex items-start gap-1.5">
-                  <span className="text-signal font-bold">•</span>
-                  <span><strong>KYC Verification:</strong> Government photo ID &amp; address proof.</span>
-                </div>
-                <div className="flex items-start gap-1.5">
-                  <span className="text-signal font-bold">•</span>
-                  <span><strong>Subscription Plans:</strong> ₹49 Daily Pass or ₹999 Monthly Pass.</span>
-                </div>
-              </div>
-
-              {/* Sample Demo Account Credentials from Section 6 of SRS */}
-              <div className="border border-dashed border-ink p-3 bg-paper font-mono text-xs">
-                <span className="font-bold block text-ink mb-1">DEMO PARTNER CREDENTIALS (SRS SEC. 6):</span>
-                <div className="text-soft">
-                  Name: <span className="text-ink font-bold">Rajesh Kumar (Electrician · 4.9 ★)</span>
-                </div>
-                <div className="text-soft">
-                  Email: <span className="text-ink font-bold">rajesh@example.com</span>
-                </div>
-                <div className="text-soft">
-                  Password: <span className="text-ink font-bold">Partner@2026</span>
-                </div>
-                <div className="mt-2 text-[11px] text-signal font-bold">
-                  * Full partner dispatch radar and job accept/decline queue launches in Prompt 3.
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowPartnerNotice(false)}
-                  className="btn-primary w-full min-h-[44px] text-xs font-mono font-bold"
-                >
-                  Understood — Return to Customer Form
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

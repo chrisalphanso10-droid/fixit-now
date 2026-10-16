@@ -14,6 +14,11 @@ import {
 import { geocodeAddress } from '../services/geocoding.service.js';
 import { createAndDispatchOtp, verifyOtp } from '../services/otp.service.js';
 
+// RFC-compliant email, phone (10-15 digits), and 6-digit OTP validation patterns
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_REGEX = /^\+?[0-9\s-]{10,15}$/;
+const OTP_REGEX = /^\d{6}$/;
+
 // =============================================================================
 // 1. CUSTOMER AUTHENTICATION
 // =============================================================================
@@ -32,16 +37,36 @@ export async function registerCustomer(req, res, next) {
     if (!phone?.trim()) return res.status(400).json({ status: 'error', message: 'Phone number is required.' });
     if (!address?.trim()) return res.status(400).json({ status: 'error', message: 'Address is required.' });
 
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = name.trim();
+    const cleanPhone = phone.trim();
+    const cleanAddress = address.trim();
+
+    // Format & completeness validation (SRS FR-C1)
+    if (!EMAIL_REGEX.test(cleanEmail)) {
+      return res.status(400).json({ status: 'error', message: 'Please provide a valid email address.' });
+    }
+
+    const phoneDigits = cleanPhone.replace(/\D/g, '');
+    if (!PHONE_REGEX.test(cleanPhone) || phoneDigits.length < 10) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please provide a valid phone number with at least 10 digits.',
+      });
+    }
+
+    if (cleanAddress.length < 5) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please provide a complete service address (at least 5 characters).',
+      });
+    }
+
     // Password policy check
     const passCheck = validatePassword(password);
     if (!passCheck.valid) {
       return res.status(400).json({ status: 'error', message: passCheck.message });
     }
-
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanName = name.trim();
-    const cleanPhone = phone.trim();
-    const cleanAddress = address.trim();
 
     // Check existing customer
     const existing = await query('SELECT id FROM customers WHERE email = $1', [cleanEmail]);
@@ -123,6 +148,13 @@ export async function loginCustomer(req, res, next) {
 
     const cleanEmail = email.trim().toLowerCase();
 
+    if (!EMAIL_REGEX.test(cleanEmail)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please provide a valid email address.',
+      });
+    }
+
     const result = await query(
       `SELECT id, name, email, password_hash, phone, address, latitude, longitude
        FROM customers WHERE email = $1`,
@@ -185,6 +217,13 @@ export async function forgotPasswordCustomer(req, res, next) {
 
     const cleanEmail = email.trim().toLowerCase();
 
+    if (!EMAIL_REGEX.test(cleanEmail)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please provide a valid registered email address.',
+      });
+    }
+
     const exists = await query('SELECT id FROM customers WHERE email = $1', [cleanEmail]);
     if (exists.rows.length === 0) {
       return res.status(404).json({
@@ -219,13 +258,27 @@ export async function resetPasswordCustomer(req, res, next) {
       });
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanOtp = otp.trim();
+
+    if (!EMAIL_REGEX.test(cleanEmail)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please provide a valid email address.',
+      });
+    }
+
+    if (!OTP_REGEX.test(cleanOtp)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Verification OTP must be exactly 6 numeric digits.',
+      });
+    }
+
     const passCheck = validatePassword(newPassword);
     if (!passCheck.valid) {
       return res.status(400).json({ status: 'error', message: passCheck.message });
     }
-
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanOtp = otp.trim();
 
     const isValid = await verifyOtp(cleanEmail, cleanOtp, 'forgot_password');
     if (!isValid) {
@@ -301,16 +354,36 @@ export async function registerPartner(req, res, next) {
       }
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = name.trim();
+    const cleanPhone = phone.trim();
+    const cleanAddress = address.trim();
+
+    // Format & completeness validation (SRS FR-P1 & FR-C2)
+    if (!EMAIL_REGEX.test(cleanEmail)) {
+      return res.status(400).json({ status: 'error', message: 'Please provide a valid email address.' });
+    }
+
+    const phoneDigits = cleanPhone.replace(/\D/g, '');
+    if (!PHONE_REGEX.test(cleanPhone) || phoneDigits.length < 10) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please provide a valid phone number with at least 10 digits.',
+      });
+    }
+
+    if (cleanAddress.length < 5) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please provide a complete operating address (at least 5 characters).',
+      });
+    }
+
     // Password policy check
     const passCheck = validatePassword(password);
     if (!passCheck.valid) {
       return res.status(400).json({ status: 'error', message: passCheck.message });
     }
-
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanName = name.trim();
-    const cleanPhone = phone.trim();
-    const cleanAddress = address.trim();
 
     // Check existing partner
     const existing = await query('SELECT id FROM partners WHERE email = $1', [cleanEmail]);
@@ -386,6 +459,7 @@ export async function registerPartner(req, res, next) {
 
 /**
  * Login Partner (SRS FR-P6)
+ * Supports login via either registered email or phone number
  */
 export async function loginPartner(req, res, next) {
   try {
@@ -394,11 +468,21 @@ export async function loginPartner(req, res, next) {
     if (!email?.trim() || !password) {
       return res.status(400).json({
         status: 'error',
-        message: 'Please provide both partner email and password.',
+        message: 'Please provide both partner email/phone and password.',
       });
     }
 
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanIdentifier = email.trim();
+    const isEmail = cleanIdentifier.includes('@');
+    if (isEmail && !EMAIL_REGEX.test(cleanIdentifier.toLowerCase())) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please provide a valid partner email address.',
+      });
+    }
+
+    const cleanEmail = cleanIdentifier.toLowerCase();
+    const digitsOnly = cleanIdentifier.replace(/\D/g, '');
 
     const result = await query(
       `SELECT p.id, p.name, p.email, p.password_hash, p.phone, p.address,
@@ -406,14 +490,14 @@ export async function loginPartner(req, res, next) {
               p.kyc_status, p.online, p.rating, p.total_jobs
        FROM partners p
        JOIN services s ON p.service_id = s.id
-       WHERE p.email = $1`,
-      [cleanEmail]
+       WHERE p.email = $1 OR (length($2) >= 10 AND (regexp_replace(p.phone, '\\D', '', 'g') = $2 OR regexp_replace(p.phone, '\\D', '', 'g') LIKE '%' || $2))`,
+      [cleanEmail, digitsOnly]
     );
 
     if (result.rows.length === 0) {
       return res.status(401).json({
         status: 'error',
-        message: 'Invalid credentials. No partner account found with this email.',
+        message: 'Invalid credentials. No partner account found with this email or phone number.',
       });
     }
 
@@ -473,6 +557,13 @@ export async function forgotPasswordPartner(req, res, next) {
 
     const cleanEmail = email.trim().toLowerCase();
 
+    if (!EMAIL_REGEX.test(cleanEmail)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please provide a valid registered partner email address.',
+      });
+    }
+
     const exists = await query('SELECT id FROM partners WHERE email = $1', [cleanEmail]);
     if (exists.rows.length === 0) {
       return res.status(404).json({
@@ -507,13 +598,27 @@ export async function resetPasswordPartner(req, res, next) {
       });
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanOtp = otp.trim();
+
+    if (!EMAIL_REGEX.test(cleanEmail)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please provide a valid email address.',
+      });
+    }
+
+    if (!OTP_REGEX.test(cleanOtp)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Verification OTP must be exactly 6 numeric digits.',
+      });
+    }
+
     const passCheck = validatePassword(newPassword);
     if (!passCheck.valid) {
       return res.status(400).json({ status: 'error', message: passCheck.message });
     }
-
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanOtp = otp.trim();
 
     const isValid = await verifyOtp(cleanEmail, cleanOtp, 'forgot_password');
     if (!isValid) {
@@ -558,6 +663,13 @@ export async function loginAdmin(req, res, next) {
     }
 
     const cleanEmail = email.trim().toLowerCase();
+
+    if (!EMAIL_REGEX.test(cleanEmail)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please provide a valid administrator email address.',
+      });
+    }
 
     const result = await query(
       `SELECT id, name, email, password_hash

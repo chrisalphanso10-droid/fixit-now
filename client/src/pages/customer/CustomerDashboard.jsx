@@ -161,7 +161,7 @@ export default function CustomerDashboard({
             </h2>
           </div>
           <span className="font-mono text-xs text-[var(--theme-text-muted)] uppercase">
-            8 VERIFIED NEIGHBOURHOOD DISCIPLINES
+            {services?.length || 8} VERIFIED NEIGHBOURHOOD DISCIPLINES
           </span>
         </div>
 

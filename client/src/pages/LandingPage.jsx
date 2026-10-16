@@ -1169,8 +1169,8 @@ export default function LandingPage({
                     <span className="font-mono text-[11px] font-bold text-signal uppercase tracking-wider">
                       PARTNER COPY
                     </span>
-                    <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 bg-paper/10 text-concrete border border-paper/30">
-                      PROMPT 3
+                    <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 bg-paper/10 text-signal border border-signal/40">
+                      0% COMMISSION
                     </span>
                   </div>
 
@@ -1200,7 +1200,7 @@ export default function LandingPage({
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-signal font-bold shrink-0">✓</span>
-                      <span>Flat daily/monthly subscription plans</span>
+                      <span>Flat quarterly, half-yearly &amp; yearly plans</span>
                     </li>
                   </ul>
                 </div>
@@ -1278,8 +1278,8 @@ export default function LandingPage({
                     ? 'Partner Onboarding & KYC'
                     : 'Partner Dashboard Login'}
                 </h3>
-                <span className="px-2 py-0.5 border border-ink bg-concrete font-mono text-[10px] font-bold">
-                  PROMPT 3
+                <span className="px-2 py-0.5 border border-ink bg-concrete font-mono text-[10px] font-bold text-signal">
+                  0% COMMISSION
                 </span>
               </div>
 
@@ -1302,7 +1302,7 @@ export default function LandingPage({
                 </div>
                 <div className="flex items-start gap-1.5">
                   <span className="text-signal font-bold">•</span>
-                  <span><strong>Subscription Plans:</strong> ₹49 Daily Pass or ₹999 Monthly Pass.</span>
+                  <span><strong>Subscription Plans:</strong> Quarterly (₹899), Half-Yearly (₹1599), or Yearly (₹2799) passes.</span>
                 </div>
               </div>
 
@@ -1310,7 +1310,7 @@ export default function LandingPage({
               <div className="border border-dashed border-ink p-3 bg-paper font-mono text-xs">
                 <span className="font-bold block text-ink mb-1">DEMO PARTNER CREDENTIALS (SRS SEC. 6):</span>
                 <div className="text-soft">
-                  Name: <span className="text-ink font-bold">Rajesh Kumar (Electrician · 4.9 ★)</span>
+                  Name: <span className="text-ink font-bold">Rajesh Kumar (Plumber · 4.9 ★)</span>
                 </div>
                 <div className="text-soft">
                   Email: <span className="text-ink font-bold">rajesh@example.com</span>
@@ -1319,7 +1319,7 @@ export default function LandingPage({
                   Password: <span className="text-ink font-bold">Partner@2026</span>
                 </div>
                 <div className="mt-2 text-[11px] text-signal font-bold">
-                  * Full partner dispatch radar and job accept/decline queue launches in Prompt 3.
+                  * 0% commission on repairs. Partners keep 100% of customer payments.
                 </div>
               </div>
 
@@ -1392,9 +1392,8 @@ export default function LandingPage({
               </p>
 
               <div className="p-3 bg-concrete border border-ink font-mono text-xs text-soft">
-                <span className="font-bold text-ink block mb-1">PHASE 2 WORK ORDER STATE:</span>
-                Authentication routing &amp; session tokens are scheduled for Phase 3 (Prompt 6).
-                Sample accounts will be verified.
+                <span className="font-bold text-ink block mb-1">SECURE RBAC AUTHENTICATION:</span>
+                Verified JWT sessions with bcrypt hashing, strict 2 km dispatch matching, and real-time OTP validation.
               </div>
 
               <div className="pt-2 flex flex-col gap-2">
