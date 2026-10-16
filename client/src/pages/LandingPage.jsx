@@ -6,6 +6,8 @@ export default function LandingPage({
   setTheme,
   onOpenCustomerPortal,
   onOpenCustomerAuth,
+  onOpenPartnerPortal,
+  onOpenPartnerAuth,
 }) {
   const [services, setServices] = useState([]);
   const [faqs, setFaqs] = useState([]);
@@ -20,6 +22,16 @@ export default function LandingPage({
       onOpenCustomerAuth(action === 'signup' ? 'register' : 'login');
     } else {
       setAuthModal({ role: 'customer', action });
+    }
+  };
+
+  const handlePartnerAuth = (action) => {
+    if (onOpenPartnerAuth) {
+      onOpenPartnerAuth(action === 'signup' ? 'register' : 'login');
+    } else if (onOpenPartnerPortal) {
+      onOpenPartnerPortal('dashboard');
+    } else {
+      setPartnerModal({ action });
     }
   };
 
@@ -102,6 +114,17 @@ export default function LandingPage({
               className="text-signal hover:underline transition-colors uppercase font-bold"
             >
               Customer Portal
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                onOpenPartnerPortal
+                  ? onOpenPartnerPortal('dashboard')
+                  : handlePartnerAuth('login')
+              }
+              className="text-[var(--theme-text-main)] hover:text-signal hover:underline transition-colors uppercase font-bold"
+            >
+              Partner Portal
             </button>
           </nav>
 
@@ -286,6 +309,20 @@ export default function LandingPage({
                 className="btn-dark w-full min-h-[44px]"
               >
                 Customer Portal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  if (onOpenPartnerPortal) {
+                    onOpenPartnerPortal('dashboard');
+                  } else {
+                    handlePartnerAuth('login');
+                  }
+                }}
+                className="btn-secondary w-full min-h-[44px]"
+              >
+                Partner Portal
               </button>
             </div>
           </div>
@@ -1218,7 +1255,7 @@ export default function LandingPage({
                   onClick={() => {
                     const act = roleModal.action;
                     setRoleModal(null);
-                    setPartnerModal({ action: act });
+                    handlePartnerAuth(act);
                   }}
                   className="btn-secondary bg-concrete text-ink hover:bg-signal hover:text-ink w-full min-h-[46px] text-xs font-mono font-bold uppercase tracking-wider"
                 >

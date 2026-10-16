@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import LandingPage from './pages/LandingPage';
 import CustomerPortal from './pages/customer/CustomerPortal';
 import CustomerAuthView from './pages/customer/CustomerAuthView';
+import PartnerPortal from './pages/partner/PartnerPortal';
+import PartnerAuthView from './pages/partner/PartnerAuthView';
 import { checkServerHealth } from './services/healthService';
 
 export default function App() {
@@ -21,10 +23,27 @@ export default function App() {
     if (hash.startsWith('customer')) {
       return 'customer';
     }
+    if (
+      hash.startsWith('partner/login') ||
+      hash.startsWith('partner/register') ||
+      hash.startsWith('partner/forgot')
+    ) {
+      return 'partner-auth';
+    }
+    if (hash.startsWith('partner')) {
+      return 'partner';
+    }
     return 'landing';
   });
 
   const [authMode, setAuthMode] = useState(() => {
+    const hash = window.location.hash.replace('#/', '').replace('#', '');
+    if (hash.includes('register')) return 'register';
+    if (hash.includes('forgot')) return 'forgot';
+    return 'login';
+  });
+
+  const [partnerAuthMode, setPartnerAuthMode] = useState(() => {
     const hash = window.location.hash.replace('#/', '').replace('#', '');
     if (hash.includes('register')) return 'register';
     if (hash.includes('forgot')) return 'forgot';
@@ -47,6 +66,28 @@ export default function App() {
           'addresses',
         ].includes(sub)
       ) {
+        return sub;
+      }
+    }
+    return 'dashboard';
+  });
+
+  const [partnerTab, setPartnerTab] = useState(() => {
+    const hash = window.location.hash.replace('#/', '').replace('#', '');
+    if (hash.startsWith('partner/')) {
+      const sub = hash.replace('partner/', '');
+      const valid = [
+        'dashboard',
+        'active-job',
+        'earnings',
+        'history',
+        'ratings',
+        'plan',
+        'plan-selection',
+        'kyc',
+        'profile',
+      ];
+      if (valid.includes(sub)) {
         return sub;
       }
     }
@@ -85,6 +126,22 @@ export default function App() {
       } else if (hash === 'customer') {
         setCurrentView('customer');
         setCustomerTab('dashboard');
+      } else if (hash === 'partner/login') {
+        setCurrentView('partner-auth');
+        setPartnerAuthMode('login');
+      } else if (hash === 'partner/register') {
+        setCurrentView('partner-auth');
+        setPartnerAuthMode('register');
+      } else if (hash === 'partner/forgot-password' || hash === 'partner/forgot') {
+        setCurrentView('partner-auth');
+        setPartnerAuthMode('forgot');
+      } else if (hash.startsWith('partner/')) {
+        const sub = hash.replace('partner/', '');
+        setCurrentView('partner');
+        setPartnerTab(sub);
+      } else if (hash === 'partner') {
+        setCurrentView('partner');
+        setPartnerTab('dashboard');
       }
     };
 
@@ -104,6 +161,20 @@ export default function App() {
     setAuthMode(mode);
     setCurrentView('customer-auth');
     window.location.hash = `/customer/${mode}`;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateToPartnerPortal = (tab = 'dashboard') => {
+    setPartnerTab(tab);
+    setCurrentView('partner');
+    window.location.hash = `/partner/${tab}`;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateToPartnerAuth = (mode = 'login') => {
+    setPartnerAuthMode(mode);
+    setCurrentView('partner-auth');
+    window.location.hash = `/partner/${mode}`;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -137,6 +208,8 @@ export default function App() {
           setTheme={setTheme}
           onOpenCustomerPortal={navigateToCustomerPortal}
           onOpenCustomerAuth={navigateToCustomerAuth}
+          onOpenPartnerPortal={navigateToPartnerPortal}
+          onOpenPartnerAuth={navigateToPartnerAuth}
         />
       )}
 
@@ -185,6 +258,61 @@ export default function App() {
 
           <div className="text-center font-mono text-xs text-[var(--theme-text-muted)] py-4">
             FixIt Now Customer Authentication · Sample Data Mode
+          </div>
+        </div>
+      )}
+
+      {currentView === 'partner' && (
+        <PartnerPortal
+          initialTab={partnerTab}
+          theme={theme}
+          setTheme={setTheme}
+          onExitPortal={returnToLanding}
+        />
+      )}
+
+      {currentView === 'partner-auth' && (
+        <div className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text-main)] flex flex-col justify-between p-4 sm:p-8">
+          <div className="max-w-2xl mx-auto w-full pt-4">
+            <div className="flex items-center justify-between border-b-2 border-[var(--theme-border)] pb-4 mb-4">
+              <a
+                href="#/"
+                onClick={(e) => {
+                  e.preventDefault();
+                  returnToLanding();
+                }}
+                className="flex items-center gap-2 group"
+              >
+                <span className="w-5 h-5 bg-signal border border-[var(--theme-border)] rotate-45 inline-block group-hover:rotate-90 transition-transform" />
+                <span className="font-display font-extrabold text-xl tracking-tight text-[var(--theme-text-main)]">
+                  FixIt <span className="text-signal">Now</span>
+                </span>
+              </a>
+              <button
+                type="button"
+                onClick={returnToLanding}
+                className="font-mono text-xs font-bold uppercase underline text-signal hover:text-[var(--theme-text-main)]"
+              >
+                ← Back to Board
+              </button>
+            </div>
+
+            <PartnerAuthView
+              initialMode={partnerAuthMode}
+              onSuccess={(partnerUser, nextStep) => {
+                if (nextStep === 'plan-selection') {
+                  navigateToPartnerPortal('plan-selection');
+                } else {
+                  navigateToPartnerPortal('dashboard');
+                }
+              }}
+              onNavigateToCustomerAuth={() => navigateToCustomerAuth('login')}
+              onCancel={returnToLanding}
+            />
+          </div>
+
+          <div className="text-center font-mono text-xs text-[var(--theme-text-muted)] py-4">
+            FixIt Now Partner Dispatch &amp; Authentication · Sample Data Mode
           </div>
         </div>
       )}
