@@ -114,8 +114,7 @@ export async function sendForgotPasswordOtp(email) {
 
   return {
     success: true,
-    message: res.message || `OTP sent to ${cleanEmail}. (Check server console for code)`,
-    demoOtp: res.demoOtp,
+    message: res.message || `OTP dispatched to ${cleanEmail}. Check server console for code.`,
   };
 }
 
@@ -263,9 +262,7 @@ export async function sendPartnerForgotPasswordOtp(email) {
 
   return {
     success: true,
-    message: res.message || `OTP sent to ${cleanEmail}. (Check server console for code)`,
-    demoOtp: res.demoOtp,
-    demo_otp: res.demoOtp,
+    message: res.message || `OTP dispatched to ${cleanEmail}. Check server console for code.`,
   };
 }
 

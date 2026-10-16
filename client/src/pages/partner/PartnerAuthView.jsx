@@ -59,7 +59,6 @@ export default function PartnerAuthView({
   const [forgotOtp, setForgotOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
-  const [demoOtpHint, setDemoOtpHint] = useState(null);
 
   // Status & error states
   const [loading, setLoading] = useState(false);
@@ -158,7 +157,6 @@ export default function PartnerAuthView({
     setError(null);
     try {
       const res = await sendPartnerForgotPasswordOtp(forgotEmail);
-      setDemoOtpHint(res.demo_otp);
       setForgotStep(2);
       setSuccessMessage(res.message);
     } catch (err) {
@@ -683,12 +681,10 @@ export default function PartnerAuthView({
             </form>
           ) : (
             <form onSubmit={handleResetPassword} className="space-y-4">
-              {demoOtpHint && (
-                <div className="border border-signal bg-paper p-3 font-mono text-xs text-ink">
-                  <span className="font-bold text-signal block mb-1">MOCK SMS GATEWAY SIMULATION:</span>
-                  Recovery OTP for {forgotEmail}: <span className="font-bold underline">{demoOtpHint}</span>
-                </div>
-              )}
+              <div className="border border-[var(--theme-border)] bg-paper p-3 font-mono text-xs text-ink">
+                <span className="font-bold text-signal block mb-1">[CONSOLE DISPATCH]:</span>
+                The 6-digit recovery OTP has been logged to your <strong>server console terminal</strong>. Check your backend terminal window and enter the code below.
+              </div>
 
               <div>
                 <label

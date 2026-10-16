@@ -193,12 +193,11 @@ export async function forgotPasswordCustomer(req, res, next) {
       });
     }
 
-    const { code } = await createAndDispatchOtp(cleanEmail, 'forgot_password');
+    await createAndDispatchOtp(cleanEmail, 'forgot_password');
 
     return res.status(200).json({
       status: 'success',
-      message: `A 6-digit OTP has been generated. Check server console for code.`,
-      demoOtp: code,
+      message: 'A 6-digit verification code has been dispatched. Check the server console terminal.',
     });
   } catch (err) {
     next(err);
@@ -482,12 +481,11 @@ export async function forgotPasswordPartner(req, res, next) {
       });
     }
 
-    const { code } = await createAndDispatchOtp(cleanEmail, 'forgot_password');
+    await createAndDispatchOtp(cleanEmail, 'forgot_password');
 
     return res.status(200).json({
       status: 'success',
-      message: `A 6-digit OTP has been generated. Check server console for code.`,
-      demoOtp: code,
+      message: 'A 6-digit verification code has been dispatched. Check the server console terminal.',
     });
   } catch (err) {
     next(err);

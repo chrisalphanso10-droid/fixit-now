@@ -40,7 +40,6 @@ export default function CustomerAuthView({
   const [forgotOtp, setForgotOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
-  const [demoOtpHint, setDemoOtpHint] = useState(null);
 
   // Status & error states
   const [loading, setLoading] = useState(false);
@@ -105,10 +104,9 @@ export default function CustomerAuthView({
     setLoading(true);
     setError(null);
     try {
-      const res = await sendForgotPasswordOtp(forgotEmail);
+      await sendForgotPasswordOtp(forgotEmail);
       setForgotStep(2);
-      setDemoOtpHint(res.demoOtp);
-      setSuccessMessage(`OTP sent to ${forgotEmail}.`);
+      setSuccessMessage(`Verification OTP generated for ${forgotEmail}. Please check your server terminal console.`);
     } catch (err) {
       setError(`! ${err.message || 'Failed to send OTP.'}`);
     } finally {
@@ -443,11 +441,14 @@ export default function CustomerAuthView({
               </form>
             ) : (
               <form onSubmit={handleResetPassword} className="space-y-4">
-                {demoOtpHint && (
-                  <div className="p-2.5 bg-concrete border border-signal font-mono text-xs text-signal font-bold">
-                    Demo Code: {demoOtpHint}
+                <div className="p-3 bg-concrete border-2 border-[var(--theme-border)] font-mono text-xs text-[var(--theme-text-main)] space-y-1">
+                  <div className="text-signal font-bold uppercase tracking-wider flex items-center gap-1.5">
+                    <span>[CONSOLE DISPATCH]</span>
                   </div>
-                )}
+                  <div className="text-xs text-[var(--theme-text-soft)]">
+                    The 6-digit OTP code has been logged to your <strong>server console terminal</strong>. Check your backend terminal window and enter the code below.
+                  </div>
+                </div>
 
                 <div className="space-y-1.5">
                   <label htmlFor="otp-input" className="block font-sans font-bold text-sm">
