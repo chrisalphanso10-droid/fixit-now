@@ -1,0 +1,288 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-radius: 0;
+    box-sizing: border-box;
+  }
+
+  /* Default Theme: Field (Light) */
+  :root,
+  [data-theme='light'] {
+    --theme-bg: #edeee9;
+    --theme-surface: #fbfaf6;
+    --theme-surface-sub: #f4f3ee;
+    --theme-border: #111418;
+    --theme-text-main: #111418;
+    --theme-text-soft: #3a3f47;
+    --theme-text-muted: #6b7079;
+    --theme-shadow-hard: 9px 9px 0 #111418;
+    --theme-shadow-hard-sm: 5px 5px 0 #111418;
+    --theme-ruler-bg: #fbfaf6;
+    --theme-ruler-tick: #111418;
+    --theme-outline-stroke: #111418;
+  }
+
+  /* Dark Theme: Workshop (Night Shift) */
+  [data-theme='dark'] {
+    --theme-bg: #0e1013;
+    --theme-surface: #16191e;
+    --theme-surface-sub: #1e2229;
+    --theme-border: #3a3f47;
+    --theme-text-main: #fbfaf6;
+    --theme-text-soft: #c9cbc4;
+    --theme-text-muted: #8b909a;
+    --theme-shadow-hard: 9px 9px 0 #ff5b14;
+    --theme-shadow-hard-sm: 5px 5px 0 #ff5b14;
+    --theme-ruler-bg: #16191e;
+    --theme-ruler-tick: #c9cbc4;
+    --theme-outline-stroke: #c9cbc4;
+  }
+
+  /* High Contrast Theme: Blueprint & Maximum Accessibility */
+  [data-theme='contrast'] {
+    --theme-bg: #000000;
+    --theme-surface: #0a0a0a;
+    --theme-surface-sub: #141414;
+    --theme-border: #ffffff;
+    --theme-text-main: #ffffff;
+    --theme-text-soft: #ffffff;
+    --theme-text-muted: #e0e0e0;
+    --theme-shadow-hard: 9px 9px 0 #ff5b14;
+    --theme-shadow-hard-sm: 5px 5px 0 #ffffff;
+    --theme-ruler-bg: #000000;
+    --theme-ruler-tick: #ffffff;
+    --theme-outline-stroke: #ffffff;
+  }
+
+  html {
+    font-family: 'DM Sans', sans-serif;
+    background-color: var(--theme-bg);
+    color: var(--theme-text-main);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition:
+      background-color 150ms ease,
+      color 150ms ease;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    background-color: var(--theme-bg);
+    color: var(--theme-text-main);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    letter-spacing: -0.03em;
+    line-height: 0.95;
+    color: var(--theme-text-main);
+    font-weight: 800;
+  }
+}
+
+/* Custom Work Order & Tradesperson Utilities */
+@layer components {
+  /* Tape measure band: 30px band with repeating trade ticks */
+  .ruler-strip {
+    height: 30px;
+    background-color: var(--theme-ruler-bg);
+    border-top: 2px solid var(--theme-border);
+    border-bottom: 2px solid var(--theme-border);
+    background-image:
+      repeating-linear-gradient(
+        to right,
+        var(--theme-ruler-tick) 0,
+        var(--theme-ruler-tick) 2px,
+        transparent 2px,
+        transparent 12px
+      ),
+      repeating-linear-gradient(
+        to right,
+        var(--theme-ruler-tick) 0,
+        var(--theme-ruler-tick) 2px,
+        transparent 2px,
+        transparent 60px
+      );
+    background-size:
+      100% 12px,
+      100% 20px;
+    background-repeat: repeat-x;
+    background-position:
+      bottom left,
+      bottom left;
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease;
+  }
+
+  /* Outline Numerals from docs/DESIGN.md Section 4 & 5 */
+  .outline-numeral {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    color: transparent;
+    -webkit-text-stroke: 2px var(--theme-outline-stroke);
+    line-height: 0.85;
+  }
+
+  .outline-numeral-dark {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 800;
+    color: transparent;
+    -webkit-text-stroke: 2px #c9cbc4;
+    line-height: 0.85;
+  }
+
+  /* Rubber Stamp Badges with authentic ink angle */
+  .stamp-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border: 2px solid var(--theme-border);
+    transform: rotate(-2.5deg);
+    line-height: 1;
+    box-shadow: 2px 2px 0 var(--theme-border);
+  }
+
+  /* Ticket tear line */
+  .tear-line {
+    border: none;
+    border-top: 2px dashed var(--theme-border);
+    margin: 0;
+    width: 100%;
+  }
+
+  .tear-line-dark {
+    border: none;
+    border-top: 2px dashed #3a3f47;
+    margin: 0;
+    width: 100%;
+  }
+
+  /* Standard Work Order Buttons */
+  .btn-primary {
+    background-color: #ff5b14;
+    color: #111418;
+    border: 2px solid var(--theme-border);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 700;
+    box-shadow: 5px 5px 0 var(--theme-border);
+    min-height: 44px;
+    padding: 10px 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    transition:
+      transform 150ms ease,
+      box-shadow 150ms ease;
+  }
+
+  .btn-primary:active {
+    transform: translate(2px, 2px);
+    box-shadow: 3px 3px 0 var(--theme-border);
+  }
+
+  .btn-secondary {
+    background-color: transparent;
+    color: var(--theme-text-main);
+    border: 2px solid var(--theme-border);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 700;
+    min-height: 44px;
+    padding: 10px 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    transition:
+      transform 150ms ease,
+      background-color 150ms ease;
+  }
+
+  .btn-secondary:hover {
+    background-color: var(--theme-surface-sub);
+  }
+
+  .btn-secondary:active {
+    transform: translate(2px, 2px);
+  }
+
+  .btn-dark {
+    background-color: #111418;
+    color: #edeee9;
+    border: 2px solid #c9cbc4;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 700;
+    min-height: 44px;
+    padding: 10px 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    box-shadow: 5px 5px 0 #ff5b14;
+    transition:
+      transform 150ms ease,
+      box-shadow 150ms ease;
+  }
+
+  .btn-dark:active {
+    transform: translate(2px, 2px);
+    box-shadow: 3px 3px 0 #ff5b14;
+  }
+
+  /* Stamp-in settling motion (docs/DESIGN.md Section 6 & 8: 150-250ms) */
+  @keyframes stampIn {
+    0% {
+      transform: scale(1.4);
+      opacity: 0.8;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  .animate-stamp-in {
+    animation: stampIn 200ms cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
