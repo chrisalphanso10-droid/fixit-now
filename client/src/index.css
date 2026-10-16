@@ -279,6 +279,45 @@
     animation: stampIn 200ms cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
   }
 
+  /* Searching screen ruler sweep animation (DESIGN.md Section 6 & 8) */
+  @keyframes rulerSweep {
+    0% {
+      background-position: -240px bottom, -240px bottom;
+    }
+    100% {
+      background-position: 240px bottom, 240px bottom;
+    }
+  }
+
+  .animate-ruler-sweep {
+    animation: rulerSweep 1.5s linear infinite;
+  }
+
+  /* Form Input Styling (docs/DESIGN.md Section 5) */
+  input[type='text'],
+  input[type='email'],
+  input[type='password'],
+  input[type='tel'],
+  input[type='number'],
+  textarea,
+  select {
+    background-color: var(--theme-surface);
+    color: var(--theme-text-main);
+    border: 2px solid var(--theme-border);
+    border-radius: 0;
+    padding: 10px 14px;
+    font-size: 16px;
+    font-family: 'DM Sans', sans-serif;
+    transition: outline 100ms ease;
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    outline: 3px solid #ff5b14;
+    outline-offset: 2px;
+  }
+
   /* FAQ Native Details / Accordions (DESIGN.md Section 5) */
   details.faq-item {
     border-top: 2px solid var(--theme-border);

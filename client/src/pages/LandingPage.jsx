@@ -1,12 +1,35 @@
 import { useState, useEffect } from 'react';
 import { getServices, getLandingFaqs } from '../services/serviceService';
 
-export default function LandingPage({ theme, setTheme }) {
+export default function LandingPage({
+  theme,
+  setTheme,
+  onOpenCustomerPortal,
+  onOpenCustomerAuth,
+}) {
   const [services, setServices] = useState([]);
   const [faqs, setFaqs] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [authModal, setAuthModal] = useState(null); // { role: 'customer' | 'partner', action: 'login' | 'signup' }
+  const [roleModal, setRoleModal] = useState(null); // { action: 'login' | 'signup' }
+  const [partnerModal, setPartnerModal] = useState(null); // { action: 'login' | 'signup' }
+  const [authModal, setAuthModal] = useState(null); // { role: 'admin' | 'customer' | 'partner', action: 'login' | 'signup' }
+
+  const handleCustomerAuth = (action) => {
+    if (onOpenCustomerAuth) {
+      onOpenCustomerAuth(action === 'signup' ? 'register' : 'login');
+    } else {
+      setAuthModal({ role: 'customer', action });
+    }
+  };
+
+  const handleBookService = (service) => {
+    if (onOpenCustomerPortal) {
+      onOpenCustomerPortal('new-request', service);
+    } else {
+      setRoleModal({ action: 'signup' });
+    }
+  };
 
   useEffect(() => {
     getServices().then((data) => {
@@ -14,6 +37,16 @@ export default function LandingPage({ theme, setTheme }) {
       if (data.length > 0) setSelectedService(data[0]);
     });
     getLandingFaqs().then((data) => setFaqs(data));
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setRoleModal(null);
+        setPartnerModal(null);
+        setAuthModal(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   return (
@@ -59,6 +92,17 @@ export default function LandingPage({ theme, setTheme }) {
             >
               Help
             </a>
+            <button
+              type="button"
+              onClick={() =>
+                onOpenCustomerPortal
+                  ? onOpenCustomerPortal('dashboard')
+                  : handleCustomerAuth('login')
+              }
+              className="text-signal hover:underline transition-colors uppercase font-bold"
+            >
+              Customer Portal
+            </button>
           </nav>
 
           {/* Right Header Actions: Theme Switcher, Login, Dark Sign up */}
@@ -99,17 +143,21 @@ export default function LandingPage({ theme, setTheme }) {
 
             <button
               type="button"
-              onClick={() => setAuthModal({ role: 'customer', action: 'login' })}
-              className="font-mono text-sm font-bold uppercase tracking-wider text-[var(--theme-text-main)] px-3 py-2 hover:text-signal transition-colors"
+              onClick={() => setRoleModal({ action: 'login' })}
+              className="font-mono text-sm font-bold uppercase tracking-wider text-[var(--theme-text-main)] px-3 py-2 hover:text-signal transition-colors flex items-center gap-1.5"
+              aria-haspopup="dialog"
             >
               Login
+              <span className="text-[10px] text-signal font-mono font-bold" aria-hidden="true">▾</span>
             </button>
             <button
               type="button"
-              onClick={() => setAuthModal({ role: 'customer', action: 'signup' })}
-              className="btn-dark min-h-[44px]"
+              onClick={() => setRoleModal({ action: 'signup' })}
+              className="btn-dark min-h-[44px] flex items-center gap-1.5"
+              aria-haspopup="dialog"
             >
               Sign up
+              <span className="text-[10px] text-signal font-mono font-bold" aria-hidden="true">▾</span>
             </button>
           </div>
 
@@ -207,21 +255,37 @@ export default function LandingPage({ theme, setTheme }) {
                 type="button"
                 onClick={() => {
                   setMobileMenuOpen(false);
-                  setAuthModal({ role: 'customer', action: 'login' });
+                  setRoleModal({ action: 'login' });
                 }}
-                className="btn-secondary w-full min-h-[44px]"
+                className="btn-secondary w-full min-h-[44px] flex items-center justify-between px-4"
               >
-                Login
+                <span>Login</span>
+                <span className="font-mono text-xs text-signal font-bold">CUSTOMER / PARTNER →</span>
               </button>
               <button
                 type="button"
                 onClick={() => {
                   setMobileMenuOpen(false);
-                  setAuthModal({ role: 'customer', action: 'signup' });
+                  setRoleModal({ action: 'signup' });
                 }}
-                className="btn-primary w-full min-h-[44px]"
+                className="btn-primary w-full min-h-[44px] flex items-center justify-between px-4"
               >
-                Sign up
+                <span>Sign up</span>
+                <span className="font-mono text-xs text-ink font-bold">CUSTOMER / PARTNER →</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  if (onOpenCustomerPortal) {
+                    onOpenCustomerPortal('dashboard');
+                  } else {
+                    handleCustomerAuth('login');
+                  }
+                }}
+                className="btn-dark w-full min-h-[44px]"
+              >
+                Customer Portal
               </button>
             </div>
           </div>
@@ -319,14 +383,14 @@ export default function LandingPage({ theme, setTheme }) {
             <div className="pt-6 border-t-2 border-dashed border-ink flex flex-col sm:flex-row items-center justify-between gap-4">
               <button
                 type="button"
-                onClick={() => setAuthModal({ role: 'customer', action: 'signup' })}
+                onClick={() => handleCustomerAuth('signup')}
                 className="btn-primary w-full sm:w-auto min-h-[44px]"
               >
                 Join as customer
               </button>
               <button
                 type="button"
-                onClick={() => setAuthModal({ role: 'customer', action: 'login' })}
+                onClick={() => handleCustomerAuth('login')}
                 className="font-sans font-bold underline text-ink text-sm hover:text-signal transition-colors py-2"
               >
                 Customer login
@@ -400,14 +464,14 @@ export default function LandingPage({ theme, setTheme }) {
             <div className="pt-6 border-t-2 border-dashed border-[#3A3F47] flex flex-col sm:flex-row items-center justify-between gap-4">
               <button
                 type="button"
-                onClick={() => setAuthModal({ role: 'partner', action: 'signup' })}
+                onClick={() => setPartnerModal({ action: 'signup' })}
                 className="btn-primary w-full sm:w-auto min-h-[44px]"
               >
                 Join as partner
               </button>
               <button
                 type="button"
-                onClick={() => setAuthModal({ role: 'partner', action: 'login' })}
+                onClick={() => setPartnerModal({ action: 'login' })}
                 className="font-sans font-bold underline text-on-dark text-sm hover:text-signal transition-colors py-2"
               >
                 Partner login
@@ -490,7 +554,7 @@ export default function LandingPage({ theme, setTheme }) {
             <div className="shrink-0 flex items-center">
               <button
                 type="button"
-                onClick={() => setAuthModal({ role: 'customer', action: 'signup' })}
+                onClick={() => handleBookService(selectedService)}
                 className="btn-primary min-h-[44px]"
               >
                 Book {selectedService.name}
@@ -880,14 +944,14 @@ export default function LandingPage({ theme, setTheme }) {
               </a>
               <button
                 type="button"
-                onClick={() => setAuthModal({ role: 'customer', action: 'signup' })}
+                onClick={() => handleCustomerAuth('signup')}
                 className="block text-on-dark hover:text-paper transition-colors py-1 text-left"
               >
                 Create Customer Account
               </button>
               <button
                 type="button"
-                onClick={() => setAuthModal({ role: 'customer', action: 'login' })}
+                onClick={() => handleCustomerAuth('login')}
                 className="block text-on-dark hover:text-paper transition-colors py-1 text-left"
               >
                 Customer Portal Login
@@ -901,14 +965,14 @@ export default function LandingPage({ theme, setTheme }) {
               </span>
               <button
                 type="button"
-                onClick={() => setAuthModal({ role: 'partner', action: 'signup' })}
+                onClick={() => setPartnerModal({ action: 'signup' })}
                 className="block text-on-dark hover:text-paper transition-colors py-1 text-left"
               >
                 Register as Partner
               </button>
               <button
                 type="button"
-                onClick={() => setAuthModal({ role: 'partner', action: 'login' })}
+                onClick={() => setPartnerModal({ action: 'login' })}
                 className="block text-on-dark hover:text-paper transition-colors py-1 text-left"
               >
                 Partner Dashboard Login
@@ -970,7 +1034,330 @@ export default function LandingPage({ theme, setTheme }) {
       </footer>
 
       {/* ============================================================== */}
-      {/* AUTHENTICATION / ACCESS MODAL                                 */}
+      {/* 1. ROLE SELECTION MODAL (Customer vs Partner)                  */}
+      {/* ============================================================== */}
+      {roleModal && (
+        <div
+          className="fixed inset-0 z-50 bg-ink/75 flex items-center justify-center p-4 overflow-y-auto backdrop-blur-xs"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="role-modal-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setRoleModal(null);
+          }}
+        >
+          <div
+            className="bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] p-6 sm:p-8 max-w-2xl w-full shadow-hard relative my-auto"
+            style={{ borderRadius: 0 }}
+          >
+            {/* Header Stamp & Close Button */}
+            <div className="flex items-center justify-between border-b-2 border-[var(--theme-border)] pb-4 mb-5">
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 bg-signal border border-[var(--theme-border)] rotate-45 inline-block" />
+                <span className="font-mono text-xs uppercase tracking-widest text-signal font-bold">
+                  ACCESS PORTAL SELECTION
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRoleModal(null)}
+                className="w-8 h-8 border-2 border-[var(--theme-border)] bg-[var(--theme-bg)] font-mono font-bold text-[var(--theme-text-main)] hover:bg-signal hover:text-ink flex items-center justify-center transition-colors"
+                aria-label="Close dialog"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Title & Mode Switcher */}
+            <div className="mb-6">
+              <h3
+                id="role-modal-title"
+                className="font-display font-extrabold text-2xl sm:text-3xl text-[var(--theme-text-main)] tracking-tight"
+              >
+                {roleModal.action === 'signup'
+                  ? 'Choose Role to Create Account'
+                  : 'Select Portal to Log In'}
+              </h3>
+              <p className="text-sm text-[var(--theme-text-soft)] mt-1">
+                Select your side of the work order to access the appropriate dashboard.
+              </p>
+
+              {/* Action Mode Switcher Tabs */}
+              <div className="inline-flex border-2 border-[var(--theme-border)] bg-[var(--theme-bg)] mt-4">
+                <button
+                  type="button"
+                  onClick={() => setRoleModal({ action: 'login' })}
+                  className={`px-4 py-1.5 font-mono text-xs font-bold uppercase transition-colors ${
+                    roleModal.action === 'login'
+                      ? 'bg-signal text-ink'
+                      : 'text-[var(--theme-text-soft)] hover:text-[var(--theme-text-main)]'
+                  }`}
+                >
+                  Log In
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRoleModal({ action: 'signup' })}
+                  className={`px-4 py-1.5 font-mono text-xs font-bold uppercase border-l-2 border-[var(--theme-border)] transition-colors ${
+                    roleModal.action === 'signup'
+                      ? 'bg-signal text-ink'
+                      : 'text-[var(--theme-text-soft)] hover:text-[var(--theme-text-main)]'
+                  }`}
+                >
+                  Sign Up
+                </button>
+              </div>
+            </div>
+
+            {/* The Two Role Choice Tickets */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+              {/* Option A: Customer Card */}
+              <div className="border-2 border-[var(--theme-border)] bg-[var(--theme-bg)] p-5 flex flex-col justify-between shadow-hard relative">
+                <div>
+                  <div className="flex items-center justify-between border-b border-[var(--theme-border)] pb-2 mb-3">
+                    <span className="font-mono text-[11px] font-bold text-signal uppercase tracking-wider">
+                      CUSTOMER COPY
+                    </span>
+                    <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 bg-signal/20 text-signal border border-signal">
+                      ACTIVE
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] flex items-center justify-center shrink-0">
+                      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-none stroke-[var(--theme-text-main)] stroke-2">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                        <polyline points="9 22 9 12 15 12 15 22" />
+                      </svg>
+                    </div>
+                    <h4 className="font-display font-bold text-xl text-[var(--theme-text-main)]">
+                      {roleModal.action === 'signup' ? 'Join as Customer' : 'Customer Login'}
+                    </h4>
+                  </div>
+
+                  <p className="text-xs text-[var(--theme-text-soft)] mb-4 leading-relaxed">
+                    Request rapid home repairs within 2 km. Follow verified partners live and settle directly on-site.
+                  </p>
+
+                  <ul className="font-mono text-xs space-y-2 mb-6 text-[var(--theme-text-main)]">
+                    <li className="flex items-start gap-2">
+                      <span className="text-done font-bold shrink-0">✓</span>
+                      <span>Verified tradespeople in &lt;2 km</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-done font-bold shrink-0">✓</span>
+                      <span>Live GPS tracking &amp; 6-step ticket</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-done font-bold shrink-0">✓</span>
+                      <span>Direct on-site payment confirmation</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const act = roleModal.action;
+                    setRoleModal(null);
+                    handleCustomerAuth(act);
+                  }}
+                  className="btn-primary w-full min-h-[46px] text-xs font-mono font-bold uppercase tracking-wider"
+                >
+                  {roleModal.action === 'signup'
+                    ? 'Create Customer Account →'
+                    : 'Log In as Customer →'}
+                </button>
+              </div>
+
+              {/* Option B: Partner Card */}
+              <div className="border-2 border-[var(--theme-border)] bg-ink text-paper p-5 flex flex-col justify-between shadow-hard relative">
+                <div>
+                  <div className="flex items-center justify-between border-b border-[#3A3F47] pb-2 mb-3">
+                    <span className="font-mono text-[11px] font-bold text-signal uppercase tracking-wider">
+                      PARTNER COPY
+                    </span>
+                    <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 bg-paper/10 text-concrete border border-paper/30">
+                      PROMPT 3
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 bg-[#2C313A] border border-[#4B5263] flex items-center justify-center shrink-0">
+                      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-none stroke-signal stroke-2">
+                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                      </svg>
+                    </div>
+                    <h4 className="font-display font-bold text-xl text-paper">
+                      {roleModal.action === 'signup' ? 'Join as Partner' : 'Partner Login'}
+                    </h4>
+                  </div>
+
+                  <p className="text-xs text-concrete/80 mb-4 leading-relaxed">
+                    For certified technicians offering 1 skilled trade category. Keep 100% of your earnings with flat subscriptions.
+                  </p>
+
+                  <ul className="font-mono text-xs space-y-2 mb-6 text-concrete">
+                    <li className="flex items-start gap-2">
+                      <span className="text-signal font-bold shrink-0">✓</span>
+                      <span>Keep 100% of your customer earnings</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-signal font-bold shrink-0">✓</span>
+                      <span>0% commission on repairs</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-signal font-bold shrink-0">✓</span>
+                      <span>Flat daily/monthly subscription plans</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const act = roleModal.action;
+                    setRoleModal(null);
+                    setPartnerModal({ action: act });
+                  }}
+                  className="btn-secondary bg-concrete text-ink hover:bg-signal hover:text-ink w-full min-h-[46px] text-xs font-mono font-bold uppercase tracking-wider"
+                >
+                  {roleModal.action === 'signup'
+                    ? 'Register as Partner →'
+                    : 'Log In as Partner →'}
+                </button>
+              </div>
+            </div>
+
+            {/* Bottom Quick Help */}
+            <div className="mt-6 pt-4 border-t border-[var(--theme-border)] flex items-center justify-between text-xs font-mono text-[var(--theme-text-soft)]">
+              <span>Looking for admin access?</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setRoleModal(null);
+                  setAuthModal({ role: 'admin', action: 'login' });
+                }}
+                className="underline hover:text-signal"
+              >
+                Admin Login (/admin/login)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 2. PARTNER DISPATCH / PREVIEW MODAL                            */}
+      {/* ============================================================== */}
+      {partnerModal && (
+        <div
+          className="fixed inset-0 z-50 bg-ink/75 flex items-center justify-center p-4 overflow-y-auto backdrop-blur-xs"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPartnerModal(null);
+          }}
+        >
+          <div
+            className="bg-paper border-2 border-ink p-6 sm:p-8 max-w-lg w-full shadow-hard relative my-auto text-ink"
+            style={{ borderRadius: 0 }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b-2 border-ink pb-4 mb-5 font-mono text-xs">
+              <span className="uppercase tracking-widest text-signal font-bold">
+                PARTNER WORK ORDER DISPATCH
+              </span>
+              <button
+                type="button"
+                onClick={() => setPartnerModal(null)}
+                className="w-8 h-8 border-2 border-ink bg-concrete font-bold text-ink hover:bg-signal flex items-center justify-center transition-colors"
+                aria-label="Close dialog"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-display font-extrabold text-2xl text-ink">
+                  {partnerModal.action === 'signup'
+                    ? 'Partner Onboarding & KYC'
+                    : 'Partner Dashboard Login'}
+                </h3>
+                <span className="px-2 py-0.5 border border-ink bg-concrete font-mono text-[10px] font-bold">
+                  PROMPT 3
+                </span>
+              </div>
+
+              <p className="text-sm text-soft leading-relaxed">
+                FixIt Now operates on a verified, flat-subscription model with <strong>0% commission</strong>.
+                Partners keep 100% of customer repair charges settled directly on-site.
+              </p>
+
+              <div className="border border-ink bg-concrete p-3 space-y-2 font-mono text-xs">
+                <span className="font-bold text-ink block border-b border-ink/30 pb-1">
+                  SRS SPECIFICATION HIGHLIGHTS:
+                </span>
+                <div className="flex items-start gap-1.5">
+                  <span className="text-signal font-bold">•</span>
+                  <span><strong>1 Trade per Partner:</strong> Select exactly one certified service.</span>
+                </div>
+                <div className="flex items-start gap-1.5">
+                  <span className="text-signal font-bold">•</span>
+                  <span><strong>KYC Verification:</strong> Government photo ID &amp; address proof.</span>
+                </div>
+                <div className="flex items-start gap-1.5">
+                  <span className="text-signal font-bold">•</span>
+                  <span><strong>Subscription Plans:</strong> ₹49 Daily Pass or ₹999 Monthly Pass.</span>
+                </div>
+              </div>
+
+              {/* Sample Demo Account Credentials from Section 6 of SRS */}
+              <div className="border border-dashed border-ink p-3 bg-paper font-mono text-xs">
+                <span className="font-bold block text-ink mb-1">DEMO PARTNER CREDENTIALS (SRS SEC. 6):</span>
+                <div className="text-soft">
+                  Name: <span className="text-ink font-bold">Rajesh Kumar (Electrician · 4.9 ★)</span>
+                </div>
+                <div className="text-soft">
+                  Email: <span className="text-ink font-bold">rajesh@example.com</span>
+                </div>
+                <div className="text-soft">
+                  Password: <span className="text-ink font-bold">Partner@2026</span>
+                </div>
+                <div className="mt-2 text-[11px] text-signal font-bold">
+                  * Full partner dispatch radar and job accept/decline queue launches in Prompt 3.
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPartnerModal(null);
+                    setRoleModal({ action: partnerModal.action });
+                  }}
+                  className="btn-secondary w-full sm:w-1/2 min-h-[44px] text-xs font-mono font-bold"
+                >
+                  ← Choose Another Role
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPartnerModal(null)}
+                  className="btn-primary w-full sm:w-1/2 min-h-[44px] text-xs font-mono font-bold"
+                >
+                  Understood — Return
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 3. FALLBACK AUTHENTICATION / ADMIN MODAL                       */}
       {/* ============================================================== */}
       {authModal && (
         <div

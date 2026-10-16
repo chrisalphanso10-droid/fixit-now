@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import LandingPage from './pages/LandingPage';
+import CustomerPortal from './pages/customer/CustomerPortal';
+import CustomerAuthView from './pages/customer/CustomerAuthView';
 import { checkServerHealth } from './services/healthService';
 
 export default function App() {
@@ -7,6 +9,51 @@ export default function App() {
     return localStorage.getItem('fixit_theme') || 'light';
   });
 
+  const [currentView, setCurrentView] = useState(() => {
+    const hash = window.location.hash.replace('#/', '').replace('#', '');
+    if (
+      hash.startsWith('customer/login') ||
+      hash.startsWith('customer/register') ||
+      hash.startsWith('customer/forgot')
+    ) {
+      return 'customer-auth';
+    }
+    if (hash.startsWith('customer')) {
+      return 'customer';
+    }
+    return 'landing';
+  });
+
+  const [authMode, setAuthMode] = useState(() => {
+    const hash = window.location.hash.replace('#/', '').replace('#', '');
+    if (hash.includes('register')) return 'register';
+    if (hash.includes('forgot')) return 'forgot';
+    return 'login';
+  });
+
+  const [customerTab, setCustomerTab] = useState(() => {
+    const hash = window.location.hash.replace('#/', '').replace('#', '');
+    if (hash.startsWith('customer/')) {
+      const sub = hash.replace('customer/', '');
+      if (
+        [
+          'dashboard',
+          'new-request',
+          'searching',
+          'tracking',
+          'rate-receipt',
+          'history',
+          'profile',
+          'addresses',
+        ].includes(sub)
+      ) {
+        return sub;
+      }
+    }
+    return 'dashboard';
+  });
+
+  const [preselectedService, setPreselectedService] = useState(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [healthData, setHealthData] = useState(null);
   const [loadingHealth, setLoadingHealth] = useState(false);
@@ -15,6 +62,56 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('fixit_theme', theme);
   }, [theme]);
+
+  // Sync hash changes with view states
+  useEffect(() => {
+    const handleHash = () => {
+      const hash = window.location.hash.replace('#/', '').replace('#', '');
+      if (hash === '' || hash === '/') {
+        setCurrentView('landing');
+      } else if (hash === 'customer/login') {
+        setCurrentView('customer-auth');
+        setAuthMode('login');
+      } else if (hash === 'customer/register') {
+        setCurrentView('customer-auth');
+        setAuthMode('register');
+      } else if (hash === 'customer/forgot-password' || hash === 'customer/forgot') {
+        setCurrentView('customer-auth');
+        setAuthMode('forgot');
+      } else if (hash.startsWith('customer/')) {
+        const sub = hash.replace('customer/', '');
+        setCurrentView('customer');
+        setCustomerTab(sub);
+      } else if (hash === 'customer') {
+        setCurrentView('customer');
+        setCustomerTab('dashboard');
+      }
+    };
+
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, []);
+
+  const navigateToCustomerPortal = (tab = 'dashboard', service = null) => {
+    setPreselectedService(service);
+    setCustomerTab(tab);
+    setCurrentView('customer');
+    window.location.hash = `/customer/${tab}`;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateToCustomerAuth = (mode = 'login') => {
+    setAuthMode(mode);
+    setCurrentView('customer-auth');
+    window.location.hash = `/customer/${mode}`;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const returnToLanding = () => {
+    setCurrentView('landing');
+    window.location.hash = '/';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const loadHealth = async () => {
     setLoadingHealth(true);
@@ -34,7 +131,63 @@ export default function App() {
 
   return (
     <>
-      <LandingPage theme={theme} setTheme={setTheme} />
+      {currentView === 'landing' && (
+        <LandingPage
+          theme={theme}
+          setTheme={setTheme}
+          onOpenCustomerPortal={navigateToCustomerPortal}
+          onOpenCustomerAuth={navigateToCustomerAuth}
+        />
+      )}
+
+      {currentView === 'customer' && (
+        <CustomerPortal
+          initialTab={customerTab}
+          theme={theme}
+          setTheme={setTheme}
+          onExitPortal={returnToLanding}
+          preselectedService={preselectedService}
+        />
+      )}
+
+      {currentView === 'customer-auth' && (
+        <div className="min-h-screen bg-[var(--theme-bg)] text-[var(--theme-text-main)] flex flex-col justify-between p-4 sm:p-8">
+          <div className="max-w-md mx-auto w-full pt-4">
+            <div className="flex items-center justify-between border-b-2 border-[var(--theme-border)] pb-4 mb-4">
+              <a
+                href="#/"
+                onClick={(e) => {
+                  e.preventDefault();
+                  returnToLanding();
+                }}
+                className="flex items-center gap-2 group"
+              >
+                <span className="w-5 h-5 bg-signal border border-[var(--theme-border)] rotate-45 inline-block group-hover:rotate-90 transition-transform" />
+                <span className="font-display font-extrabold text-xl tracking-tight text-[var(--theme-text-main)]">
+                  FixIt <span className="text-signal">Now</span>
+                </span>
+              </a>
+              <button
+                type="button"
+                onClick={returnToLanding}
+                className="font-mono text-xs font-bold uppercase underline text-signal hover:text-[var(--theme-text-main)]"
+              >
+                ← Back to Board
+              </button>
+            </div>
+
+            <CustomerAuthView
+              initialMode={authMode}
+              onSuccess={() => navigateToCustomerPortal('dashboard')}
+              onCancel={returnToLanding}
+            />
+          </div>
+
+          <div className="text-center font-mono text-xs text-[var(--theme-text-muted)] py-4">
+            FixIt Now Customer Authentication · Sample Data Mode
+          </div>
+        </div>
+      )}
 
       {/* Floating System Health Diagnostic Capsule (Keeps Prompt 0 Health Test Accessible) */}
       <div className="fixed bottom-4 right-4 z-40">
