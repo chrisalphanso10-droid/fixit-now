@@ -1,44 +1,60 @@
-import dotenv from 'dotenv';
-dotenv.config();
+/**
+ * FixIt Now - HTTP Server Bootstrap
+ * Connects to PostgreSQL connection pool, starts HTTP listener, handles graceful shutdown.
+ */
 
+import config from './config/index.js';
+import db from './config/db.js';
 import app from './app.js';
 
-const PORT = process.env.PORT || 5000;
+const PORT = config.port || 5000;
 
-const server = app.listen(PORT, () => {
-  console.log(`===============================================`);
-  console.log(`FixIt Now Backend Server running on port ${PORT}`);
-  console.log(`Health Check: http://localhost:${PORT}/api/health`);
-  console.log(`Environment:  ${process.env.NODE_ENV || 'development'}`);
-  console.log(`===============================================`);
-});
-
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`\n[FixIt Now Server Error] Port ${PORT} is already in use.`);
-    console.error(
-      `Please close any existing process on port ${PORT} or set PORT in server/.env.\n`
-    );
-    process.exit(1);
+// Test DB connection before listening
+async function startServer() {
+  const dbStatus = await db.testConnection();
+  if (dbStatus.ok) {
+    console.log(`[Database Connected] PostgreSQL: ${dbStatus.database} (user: ${dbStatus.user})`);
   } else {
-    console.error('[FixIt Now Server Error]', err);
-    process.exit(1);
+    console.warn(`[Database Warning] Could not connect to PostgreSQL: ${dbStatus.error}`);
+    console.warn(`Ensure PostgreSQL is running and DATABASE_URL in server/.env is correct.`);
   }
-});
 
-// Graceful shutdown handling
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received. Shutting down gracefully...');
-  server.close(() => {
-    console.log('FixIt Now server closed.');
-    process.exit(0);
+  const server = app.listen(PORT, () => {
+    console.log(`===============================================`);
+    console.log(`FixIt Now Backend Server running on port ${PORT}`);
+    console.log(`Health Diagnostic: http://localhost:${PORT}/api/health`);
+    console.log(`Environment:       ${config.nodeEnv}`);
+    console.log(`===============================================`);
   });
-});
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received. Shutting down gracefully...');
-  server.close(() => {
-    console.log('FixIt Now server closed.');
-    process.exit(0);
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n[FixIt Now Server Error] Port ${PORT} is already in use.`);
+      console.error(
+        `Please close any existing process on port ${PORT} or set PORT in server/.env.\n`
+      );
+      process.exit(1);
+    } else {
+      console.error('[FixIt Now Server Error]', err);
+      process.exit(1);
+    }
   });
+
+  // Graceful shutdown handling
+  const shutdown = async (signal) => {
+    console.log(`\n${signal} received. Closing FixIt Now server and DB connections...`);
+    server.close(async () => {
+      await db.pool.end();
+      console.log('FixIt Now server and database pool closed cleanly.');
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
+
+startServer().catch((err) => {
+  console.error('[Startup Failure]', err);
+  process.exit(1);
 });

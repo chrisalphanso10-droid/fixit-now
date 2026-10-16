@@ -9,6 +9,8 @@
     "dev:server": "npm --prefix server run dev",
     "start:server": "npm --prefix server start",
     "build:client": "npm --prefix client run build",
+    "db:schema": "node db/migrate.js",
+    "db:seed": "node db/seed.js",
     "lint": "eslint client/src server/src",
     "format": "prettier --write \"**/*.{js,jsx,json,css,md}\""
   },
@@ -19,5 +21,10 @@
     "eslint-plugin-react-hooks": "^5.1.0",
     "globals": "^15.14.0",
     "prettier": "^3.5.1"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "dotenv": "^18.0.8",
+    "pg": "^8.23.1"
   }
 }
