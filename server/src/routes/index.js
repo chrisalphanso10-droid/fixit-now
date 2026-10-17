@@ -6,6 +6,8 @@ import serviceRoutes from './service.routes.js';
 import partnerRoutes from './partner.routes.js';
 import customerRoutes from './customer.routes.js';
 import requestRoutes from './request.routes.js';
+import notificationRoutes from './notification.routes.js';
+import supportRoutes from './support.routes.js';
 
 const router = Router();
 
@@ -31,6 +33,12 @@ router.use('/customer', customerRoutes);
 
 // Mount Request Lifecycle & Matching Routes
 router.use('/requests', requestRoutes);
+
+// Mount In-App Notifications (SRS FR-C20)
+router.use('/notifications', notificationRoutes);
+
+// Mount Support & FAQ Routes (SRS FR-C20)
+router.use('/support', supportRoutes);
 
 export default router;
 

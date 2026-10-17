@@ -14,6 +14,8 @@ import RateAndPayView from './RateAndPayView';
 import RequestHistoryView from './RequestHistoryView';
 import CustomerProfileView from './CustomerProfileView';
 import SavedAddressesView from './SavedAddressesView';
+import NotificationsView from '../common/NotificationsView';
+import SupportView from '../common/SupportView';
 import { getCurrentCustomer, customerLogout } from '../../services/authService';
 import { getActiveRequest, setActiveRequest, getRequestHistory } from '../../services/requestService';
 import { useAuth } from '../../context/AuthContext';
@@ -180,6 +182,8 @@ export default function CustomerPortal({
             'tracking',
             'rate-receipt',
             'history',
+            'notifications',
+            'support',
             'profile',
             'addresses',
           ].includes(tab)
@@ -276,6 +280,14 @@ export default function CustomerPortal({
 
       {activeTab === 'history' && (
         <RequestHistoryView onNavigate={handleNavigate} />
+      )}
+
+      {activeTab === 'notifications' && (
+        <NotificationsView userRole="customer" />
+      )}
+
+      {activeTab === 'support' && (
+        <SupportView userRole="customer" />
       )}
 
       {activeTab === 'profile' && (

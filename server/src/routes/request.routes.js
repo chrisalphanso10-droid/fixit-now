@@ -14,6 +14,7 @@ import {
   verifyRequestOtp,
   rateRequest,
 } from '../controllers/request.controller.js';
+import { processPayment, getPaymentReceipt } from '../controllers/payment.controller.js';
 import { authenticateToken, requireRole } from '../middleware/auth.middleware.js';
 import { requestPhotoUpload } from '../middleware/upload.middleware.js';
 
@@ -85,6 +86,20 @@ router.post(
   authenticateToken,
   requireRole('customer'),
   rateRequest
+);
+
+// 9. Process simulated payment after service (SRS FR-C18: proceed, waiting, successful)
+router.post(
+  '/:id/pay',
+  authenticateToken,
+  processPayment
+);
+
+// 10. Get digital work order receipt (SRS FR-C18)
+router.get(
+  '/:id/receipt',
+  authenticateToken,
+  getPaymentReceipt
 );
 
 export default router;

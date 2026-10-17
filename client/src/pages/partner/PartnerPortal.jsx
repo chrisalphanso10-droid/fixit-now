@@ -16,6 +16,8 @@ import PlanDetailsView from './PlanDetailsView';
 import PlanSelectionView from './PlanSelectionView';
 import KycUploadView from './KycUploadView';
 import PartnerProfileView from './PartnerProfileView';
+import NotificationsView from '../common/NotificationsView';
+import SupportView from '../common/SupportView';
 import IncomingRequestPopup from './IncomingRequestPopup';
 import {
   getActivePartner,
@@ -73,6 +75,8 @@ export default function PartnerPortal({
           'earnings',
           'history',
           'ratings',
+          'notifications',
+          'support',
           'plan',
           'plan-selection',
           'kyc',
@@ -352,6 +356,14 @@ export default function PartnerPortal({
 
         {activeTab === 'ratings' && (
           <PartnerRatingsView partner={partner} />
+        )}
+
+        {activeTab === 'notifications' && (
+          <NotificationsView userRole="partner" />
+        )}
+
+        {activeTab === 'support' && (
+          <SupportView userRole="partner" />
         )}
 
         {activeTab === 'plan' && (

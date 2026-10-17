@@ -109,13 +109,6 @@ export default function LandingPage({
             >
               Help
             </a>
-            <button
-              type="button"
-              onClick={() => handleCustomerAuth('login')}
-              className="text-[var(--theme-text-main)] hover:text-signal transition-colors underline-offset-4 hover:underline font-mono text-sm uppercase tracking-wider font-bold"
-            >
-              Customer Login
-            </button>
           </nav>
 
           {/* Right Header Actions: Theme Switcher, Login, Dark Sign up */}
@@ -268,22 +261,11 @@ export default function LandingPage({
                 type="button"
                 onClick={() => {
                   setMobileMenuOpen(false);
-                  handleCustomerAuth('login');
-                }}
-                className="btn-secondary w-full min-h-[44px] flex items-center justify-between px-4 border-2 border-signal"
-              >
-                <span>Customer Login</span>
-                <span className="font-mono text-xs text-signal font-bold">SIGN IN →</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
                   setRoleModal({ action: 'login' });
                 }}
                 className="btn-secondary w-full min-h-[44px] flex items-center justify-between px-4"
               >
-                <span>All Roles Login</span>
+                <span>Login</span>
                 <span className="font-mono text-xs text-soft font-bold">CHOOSE ROLE →</span>
               </button>
               <button

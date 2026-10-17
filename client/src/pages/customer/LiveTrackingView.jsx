@@ -556,8 +556,8 @@ export default function LiveTrackingView({
             </div>
             <button
               type="button"
-              onClick={() => setShowPaymentModal(true)}
-              className="btn-primary min-h-[46px] px-8 text-sm uppercase font-mono font-bold tracking-wider shadow-hard shrink-0"
+              onClick={() => onNavigate('rate-receipt')}
+              className="btn-primary min-h-[46px] px-8 text-sm uppercase font-mono font-bold tracking-wider shadow-hard shrink-0 cursor-pointer"
             >
               PROCEED TO PAYMENT →
             </button>
@@ -974,7 +974,11 @@ export default function LiveTrackingView({
                       : 'bg-paper text-ink border-ink/40 hover:border-ink'
                   }`}
                 >
-                  <span className="text-xl">💵</span>
+                  <svg viewBox="0 0 24 24" className="w-5 h-5 stroke-current fill-none" strokeWidth="2" aria-hidden="true">
+                    <rect x="2" y="6" width="20" height="12" />
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M6 12h.01M18 12h.01" />
+                  </svg>
                   <span>Cash on Delivery</span>
                 </button>
                 <button
@@ -986,7 +990,10 @@ export default function LiveTrackingView({
                       : 'bg-paper text-ink border-ink/40 hover:border-ink'
                   }`}
                 >
-                  <span className="text-xl">📱</span>
+                  <svg viewBox="0 0 24 24" className="w-5 h-5 stroke-current fill-none" strokeWidth="2" aria-hidden="true">
+                    <rect x="5" y="2" width="14" height="20" />
+                    <line x1="12" y1="18" x2="12.01" y2="18" strokeWidth="3" />
+                  </svg>
                   <span>UPI / QR Code</span>
                 </button>
               </div>

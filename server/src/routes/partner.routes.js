@@ -15,6 +15,7 @@ import {
   reviewPartnerKyc,
   togglePartnerOnline,
   getPartnerRatings,
+  getPartnerEarnings,
 } from '../controllers/partner.controller.js';
 import { authenticateToken, requireRole } from '../middleware/auth.middleware.js';
 import { verifyToken } from '../services/token.service.js';
@@ -108,6 +109,13 @@ router.get(
   '/ratings',
   optionalPartnerAuth,
   getPartnerRatings
+);
+
+router.get(
+  '/earnings',
+  authenticateToken,
+  requireRole('partner'),
+  getPartnerEarnings
 );
 
 // =============================================================================

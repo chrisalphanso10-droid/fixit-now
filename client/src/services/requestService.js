@@ -305,6 +305,59 @@ export async function getRequestById(id) {
   return null;
 }
 
+/**
+ * Process simulated payment (SRS FR-C18)
+ * States: 'proceed' -> 'waiting' -> 'successful'
+ */
+export async function processSimulatedPayment(
+  requestId,
+  { payment_method = 'Direct UPI / Cash (On-site)', state = 'successful', amount = 450.0 } = {}
+) {
+  try {
+    const res = await post(`/api/requests/${requestId}/pay`, {
+      payment_method,
+      state,
+      amount,
+    });
+    if (res && res.status === 'success' && res.data) {
+      if (state === 'successful') {
+        const active = getActiveRequest();
+        if (active && String(active.id) === String(requestId)) {
+          const updated = {
+            ...active,
+            status: 'payment_completed',
+            step_index: 6,
+            payment_confirmed: true,
+            receipt_no: res.data.receipt?.receipt_no || res.data.payment?.receipt_no,
+          };
+          setActiveRequest(updated);
+        }
+      }
+      return res.data;
+    }
+    throw new Error(res?.message || 'Payment simulation failed.');
+  } catch (err) {
+    console.warn('[RequestService] processSimulatedPayment failed:', err.message);
+    throw err;
+  }
+}
+
+/**
+ * Get work order payment receipt (SRS FR-C18)
+ */
+export async function getRequestReceipt(requestId) {
+  try {
+    const res = await get(`/api/requests/${requestId}/receipt`);
+    if (res && res.status === 'success' && res.data) {
+      return res.data;
+    }
+    throw new Error(res?.message || 'Failed to load receipt.');
+  } catch (err) {
+    console.warn('[RequestService] getRequestReceipt failed:', err.message);
+    throw err;
+  }
+}
+
 export default {
   getActiveRequest,
   setActiveRequest,
@@ -315,4 +368,6 @@ export default {
   submitRequestRating,
   getRequestHistory,
   getRequestById,
+  processSimulatedPayment,
+  getRequestReceipt,
 };

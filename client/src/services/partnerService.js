@@ -971,7 +971,14 @@ export async function simulateCustomerCancel(jobId, reason = 'Customer cancelled
 /* ========================================================================== */
 
 export async function getPartnerEarnings(partnerId) {
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  try {
+    const res = await get('/api/partner/earnings');
+    if (res && res.status === 'success' && res.data) {
+      return res.data;
+    }
+  } catch (err) {
+    console.warn('[PartnerService] getPartnerEarnings API failed:', err.message);
+  }
   return getStoredEarnings(partnerId);
 }
 
@@ -1067,16 +1074,20 @@ export async function getPartnerRatings(partnerId) {
     // ignore
   }
 
-  const baseReviews = (mockPartnerRatings.reviews || []).map((r) => ({
-    id: r.id,
-    order_number: r.order_number,
-    order_id: r.order_number,
-    customer_name: r.customer_name,
-    stars: r.stars,
-    date: r.date,
-    comment: r.comment,
-    service_name: r.service_name,
-  }));
+  const currentPartner = getActivePartner();
+  const isDemoPartner = String(currentPartner?.id) === '101' || currentPartner?.email === 'rajesh.plumber@fixitnow.local';
+  const baseReviews = (isDemoPartner && apiReviews.length === 0 && localRecentRatings.length === 0)
+    ? (mockPartnerRatings.reviews || []).map((r) => ({
+        id: r.id,
+        order_number: r.order_number,
+        order_id: r.order_number,
+        customer_name: r.customer_name,
+        stars: r.stars,
+        date: r.date,
+        comment: r.comment,
+        service_name: r.service_name,
+      }))
+    : [];
 
   // Merge recent customer reviews at the top, followed by API reviews and baseline reviews
   const seenReviews = new Set();
@@ -1243,11 +1254,20 @@ export async function getPartnerHistory(partnerId, filter = 'ALL') {
     },
   ];
 
-  // Merge: Local recent jobs first, then API jobs, then baseline
+  // Merge: Local recent jobs first, then API jobs, then baseline (for demo partner only)
+  const currentPartnerForHist = getActivePartner();
+  const isDemoPartnerForHist =
+    String(currentPartnerForHist?.id) === '101' ||
+    currentPartnerForHist?.email === 'rajesh.plumber@fixitnow.local';
+  const fallbackJobs =
+    isDemoPartnerForHist && apiJobs.length === 0 && localRecentJobs.length === 0
+      ? baselineList
+      : [];
+
   const seenOrders = new Set();
   const merged = [];
 
-  for (const job of [...localRecentJobs, ...apiJobs, ...baselineList]) {
+  for (const job of [...localRecentJobs, ...apiJobs, ...fallbackJobs]) {
     const key = job.order_number || String(job.id);
     if (!seenOrders.has(key)) {
       seenOrders.add(key);

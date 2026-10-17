@@ -11,21 +11,24 @@ export default function PartnerHistoryView({ partner }) {
   const [history, setHistory] = useState([]);
   const [filter, setFilter] = useState('ALL'); // 'ALL' | 'COMPLETED' | 'CANCELLED'
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [selectedReceipt, setSelectedReceipt] = useState(null);
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadData = async () => {
     setLoading(true);
+    setError(null);
+    try {
+      const data = await getPartnerHistory(partner?.id || 101, filter);
+      setHistory(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('[PartnerHistoryView] Error:', err);
+      setError(err.message || 'Failed to load archive entries.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const loadData = () => {
-      getPartnerHistory(partner?.id || 101, filter).then((data) => {
-        if (isMounted) {
-          setHistory(data);
-          setLoading(false);
-        }
-      });
-    };
-
+  useEffect(() => {
     loadData();
 
     const handleUpdate = () => {
@@ -36,7 +39,6 @@ export default function PartnerHistoryView({ partner }) {
     window.addEventListener('fixit_partner_history_updated', handleUpdate);
 
     return () => {
-      isMounted = false;
       window.removeEventListener('storage', handleUpdate);
       window.removeEventListener('fixit_partner_history_updated', handleUpdate);
     };
@@ -109,6 +111,21 @@ export default function PartnerHistoryView({ partner }) {
       {loading ? (
         <div className="p-8 text-center font-mono text-sm text-[var(--theme-text-soft)] border-2 border-[var(--theme-border)] bg-[var(--theme-surface)]">
           LOADING ARCHIVE ENTRIES...
+        </div>
+      ) : error ? (
+        <div className="p-6 border-2 border-dashed border-signal bg-[var(--theme-surface)] space-y-3 font-mono">
+          <div className="flex items-center gap-2 text-signal text-xs font-bold uppercase">
+            <span>[!]</span>
+            <span>Failed to load archive entries</span>
+          </div>
+          <p className="font-sans text-sm text-[var(--theme-text-main)]">{error}</p>
+          <button
+            type="button"
+            onClick={loadData}
+            className="px-4 py-1.5 border-2 border-ink bg-ink text-paper text-xs font-bold uppercase hover:bg-signal hover:text-ink cursor-pointer"
+          >
+            Retry
+          </button>
         </div>
       ) : (
         <div className="space-y-4">

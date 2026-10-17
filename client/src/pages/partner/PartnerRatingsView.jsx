@@ -1,28 +1,32 @@
 /**
  * FixIt Now - Partner Ratings & Customer Reviews Screen
- * 4.90 aggregate score, star distribution breakdown, and verified customer testimonials.
+ * Aggregate score, star distribution breakdown, and verified customer testimonials.
  * Conforms to SRS FR-P11 and docs/DESIGN.md.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getPartnerRatings } from '../../services/partnerService';
 
 export default function PartnerRatingsView({ partner }) {
   const [ratingsData, setRatingsData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const loadRatings = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getPartnerRatings(partner?.id || 101);
+      setRatingsData(data);
+    } catch (err) {
+      console.error('[PartnerRatingsView] Error:', err);
+      setError(err.message || 'Failed to calculate ratings scorecard.');
+    } finally {
+      setLoading(false);
+    }
+  }, [partner?.id]);
 
   useEffect(() => {
-    let isMounted = true;
-
-    const loadRatings = () => {
-      getPartnerRatings(partner?.id || 101).then((data) => {
-        if (isMounted) {
-          setRatingsData(data);
-          setLoading(false);
-        }
-      });
-    };
-
     loadRatings();
 
     const handleUpdate = () => {
@@ -33,23 +37,45 @@ export default function PartnerRatingsView({ partner }) {
     window.addEventListener('fixit_partner_ratings_updated', handleUpdate);
 
     return () => {
-      isMounted = false;
       window.removeEventListener('storage', handleUpdate);
       window.removeEventListener('fixit_partner_ratings_updated', handleUpdate);
     };
-  }, [partner?.id]);
+  }, [loadRatings]);
 
-  if (loading || !ratingsData) {
+  if (loading) {
     return (
-      <div className="p-8 text-center font-mono text-sm text-[var(--theme-text-soft)] border-2 border-[var(--theme-border)] bg-[var(--theme-surface)]">
-        CALCULATING REPUTATION SCORECARD...
+      <div className="p-8 text-center border-2 border-[var(--theme-border)] bg-[var(--theme-surface)]">
+        <div className="inline-block w-6 h-6 border-2 border-signal border-t-transparent animate-spin mb-2" />
+        <p className="font-mono text-xs uppercase tracking-widest text-[var(--theme-text-soft)]">
+          CALCULATING REPUTATION SCORECARD...
+        </p>
       </div>
     );
   }
 
-  const breakdown = ratingsData.breakdown || { 5: 128, 4: 10, 3: 3, 2: 1, 1: 0 };
-  const totalReviews = ratingsData.total_reviews || 142;
-  const averageRating = ratingsData.average || 4.9;
+  if (error) {
+    return (
+      <div className="p-6 border-2 border-dashed border-signal bg-[var(--theme-surface)] space-y-3 font-mono">
+        <div className="flex items-center gap-2 text-signal text-xs font-bold uppercase">
+          <span>[!]</span>
+          <span>Failed to load reputation scorecard</span>
+        </div>
+        <p className="font-sans text-sm text-[var(--theme-text-main)]">{error}</p>
+        <button
+          type="button"
+          onClick={loadRatings}
+          className="px-4 py-1.5 border-2 border-ink bg-ink text-paper text-xs font-bold uppercase hover:bg-signal hover:text-ink cursor-pointer"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  const breakdown = ratingsData?.breakdown || { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+  const totalReviews = ratingsData?.total_reviews ?? 0;
+  const averageRating = ratingsData?.average ?? 5.0;
+  const reviewsList = ratingsData?.recent_reviews || ratingsData?.reviews || [];
 
   return (
     <div className="space-y-6">
@@ -72,7 +98,7 @@ export default function PartnerRatingsView({ partner }) {
           </div>
 
           <div className="border-2 border-signal bg-paper text-ink px-3 py-1 font-mono text-xs font-bold uppercase shadow-hard-sm self-start sm:self-auto">
-            PRO RATED · 98% SATISFACTION
+            {totalReviews > 0 ? `${totalReviews} VERIFIED REVIEWS` : 'PRO TRADESPERSON'}
           </div>
         </div>
 
@@ -94,24 +120,26 @@ export default function PartnerRatingsView({ partner }) {
             </span>
             <div className="flex items-baseline gap-2">
               <span className="font-display font-black text-6xl text-[var(--theme-text-main)]">
-                {averageRating.toFixed(2)}
+                {averageRating.toFixed(1)}
               </span>
               <span className="font-mono text-lg text-signal font-bold">/ 5.0</span>
             </div>
 
             <div className="flex items-center gap-1 text-signal text-xl mt-2">
-              ★★★★★
+              {'★'.repeat(Math.round(averageRating))}
             </div>
 
             <p className="font-mono text-xs text-[var(--theme-text-soft)] mt-4">
-              Based on {totalReviews} authenticated customer job reviews.
+              {totalReviews > 0
+                ? `Based on ${totalReviews} authenticated customer job review${totalReviews === 1 ? '' : 's'}.`
+                : 'No reviews yet. Complete your first customer work order to receive reviews.'}
             </p>
           </div>
 
           <div className="mt-6 pt-4 border-t-2 border-[var(--theme-border)] space-y-2 font-mono text-xs">
             <div className="flex justify-between">
               <span className="text-[var(--theme-text-soft)]">PUNCTUALITY:</span>
-              <span className="font-bold text-done">99.4% On-Time</span>
+              <span className="font-bold text-done">100% On-Time</span>
             </div>
             <div className="flex justify-between">
               <span className="text-[var(--theme-text-soft)]">WORK GUARANTEE:</span>
@@ -168,12 +196,12 @@ export default function PartnerRatingsView({ partner }) {
             RECENT VERIFIED CUSTOMER REVIEWS
           </span>
           <span className="font-mono text-[11px] text-[var(--theme-text-soft)]">
-            Showing latest {ratingsData.recent_reviews?.length || 0} reviews
+            {reviewsList.length} review{reviewsList.length === 1 ? '' : 's'} recorded
           </span>
         </div>
 
         <div className="divide-y-2 divide-[var(--theme-border)]">
-          {(ratingsData.recent_reviews || []).map((review) => (
+          {reviewsList.map((review) => (
             <div key={review.id} className="p-5 sm:p-6 space-y-2">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 font-mono text-xs">
                 <div className="flex items-center gap-2">
@@ -204,6 +232,12 @@ export default function PartnerRatingsView({ partner }) {
               </p>
             </div>
           ))}
+
+          {reviewsList.length === 0 && (
+            <div className="p-8 text-center font-mono text-sm text-[var(--theme-text-soft)]">
+              No customer reviews received yet. Reviews will show up here after service completion.
+            </div>
+          )}
         </div>
       </div>
     </div>

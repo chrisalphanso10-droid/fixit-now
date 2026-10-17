@@ -15,6 +15,7 @@ import {
   stopMovementSimulation,
   notifyRequestStatusUpdate,
 } from '../services/socket.service.js';
+import { createNotification } from './notification.controller.js';
 
 /**
  * 1. Create a New Service Request (SRS FR-C6, FR-C9, FR-C10)
@@ -238,7 +239,7 @@ export async function getRequestHistory(req, res, next) {
   try {
     const userId = req.user.id;
     const userRole = req.user.role;
-    const filter = req.query.filter || 'all';
+    const filter = (req.query.filter || req.query.status || 'all').toLowerCase();
 
     let condition = '';
     const params = [userId];
@@ -267,49 +268,22 @@ export async function getRequestHistory(req, res, next) {
          p.rating AS partner_rating,
          p.vehicle AS partner_vehicle,
          rat.stars AS rating_stars,
-         rat.comment AS rating_comment
+         rat.comment AS rating_comment,
+         pay.receipt_no,
+         pay.payment_method,
+         pay.amount AS paid_amount
        FROM requests r
        JOIN services s ON r.service_id = s.id
        JOIN customers c ON r.customer_id = c.id
        LEFT JOIN partners p ON r.partner_id = p.id
        LEFT JOIN ratings rat ON rat.request_id = r.id
+       LEFT JOIN payments pay ON pay.request_id = r.id
        WHERE ${condition}
        ORDER BY r.created_at DESC`,
       params
     );
 
-    let rows = result.rows;
-    if (userRole === 'partner' && rows.length === 0) {
-      let fallbackCond = '1=1';
-      if (filter === 'completed') {
-        fallbackCond = "r.status IN ('service_completed', 'payment_completed')";
-      } else if (filter === 'cancelled') {
-        fallbackCond = "r.status = 'cancelled'";
-      }
-      const fallbackRes = await query(
-        `SELECT
-           r.*,
-           s.name AS service_name,
-           s.base_price_estimate,
-           c.name AS customer_name,
-           c.phone AS customer_phone,
-           p.name AS partner_name,
-           p.phone AS partner_phone,
-           p.rating AS partner_rating,
-           p.vehicle AS partner_vehicle,
-           rat.stars AS rating_stars,
-           rat.comment AS rating_comment
-         FROM requests r
-         JOIN services s ON r.service_id = s.id
-         JOIN customers c ON r.customer_id = c.id
-         LEFT JOIN partners p ON r.partner_id = p.id
-         LEFT JOIN ratings rat ON rat.request_id = r.id
-         WHERE ${fallbackCond}
-         ORDER BY r.created_at DESC
-         LIMIT 25`
-      );
-      rows = fallbackRes.rows;
-    }
+    const rows = result.rows;
 
     const mapped = rows.map((row) => ({
       ...row,
@@ -317,8 +291,9 @@ export async function getRequestHistory(req, res, next) {
       rating: row.rating_stars
         ? { stars: row.rating_stars, comment: row.rating_comment }
         : null,
-      amount: parseFloat(row.base_price_estimate) || 450.0,
-      payment_mode: 'Direct UPI / Cash (On-site)',
+      amount: parseFloat(row.paid_amount || row.base_price_estimate) || 450.0,
+      payment_mode: row.payment_method || 'Direct UPI / Cash (On-site)',
+      receipt_no: row.receipt_no,
       completed_at: row.updated_at || row.created_at,
       partner: row.partner_id
         ? {
@@ -689,6 +664,17 @@ export async function rateRequest(req, res, next) {
       );
     } catch (err) {
       console.warn('[Partner Rating Update Warning]:', err.message);
+    }
+
+    try {
+      await createNotification({
+        recipientType: 'partner',
+        recipientId: partnerId,
+        title: 'New Customer Review',
+        message: `A customer gave you ${numStars}★: "${cleanComment.slice(0, 60)}"`,
+      });
+    } catch (notifErr) {
+      console.warn('[Rating notification warning]:', notifErr.message);
     }
 
     return res.status(201).json({

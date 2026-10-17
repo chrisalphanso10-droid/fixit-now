@@ -871,9 +871,8 @@ export async function getPartnerRatings(req, res, next) {
   try {
     const partnerId = req.user?.id || req.query.partner_id;
 
-    // Query recent ratings from the database
-    const allRatingsRes = await query(
-      `SELECT rat.id, rat.stars, rat.comment, rat.created_at AS date,
+    let queryText = `
+      SELECT rat.id, rat.stars, rat.comment, rat.created_at AS date,
               rat.request_id,
               rat.partner_id,
               c.name AS customer_name,
@@ -883,22 +882,22 @@ export async function getPartnerRatings(req, res, next) {
        JOIN requests req ON rat.request_id = req.id
        JOIN customers c ON req.customer_id = c.id
        JOIN services s ON req.service_id = s.id
-       ORDER BY rat.created_at DESC
-       LIMIT 50`
-    );
+    `;
+    const params = [];
 
-    let rows = allRatingsRes.rows;
-
-    // If partner UUID is supplied, prioritize their ratings first, followed by recent ratings
     if (
       partnerId &&
       typeof partnerId === 'string' &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(partnerId)
     ) {
-      const partnerMatches = rows.filter((r) => r.partner_id === partnerId);
-      const otherMatches = rows.filter((r) => r.partner_id !== partnerId);
-      rows = [...partnerMatches, ...otherMatches];
+      params.push(partnerId);
+      queryText += ` WHERE rat.partner_id = $1`;
     }
+
+    queryText += ` ORDER BY rat.created_at DESC LIMIT 50`;
+
+    const allRatingsRes = await query(queryText, params);
+    const rows = allRatingsRes.rows;
 
     const reviews = rows.map((r) => {
       const orderNum = `ORD-${String(r.order_id).replace(/-/g, '').slice(0, 4).toUpperCase()}`;
@@ -943,6 +942,109 @@ export async function getPartnerRatings(req, res, next) {
   }
 }
 
+/**
+ * 11. Get Partner Earnings & Payout Breakdown (SRS FR-P12, BR-7)
+ * Updated ONLY after payment is marked received.
+ * Breakdown by day and service.
+ * Respects user rule: Do not expose raw monetary earnings in payouts.
+ */
+export async function getPartnerEarnings(req, res, next) {
+  try {
+    const partnerId = req.user?.id || req.query.partner_id;
+    if (!partnerId) {
+      return res.status(400).json({ status: 'error', message: 'Partner ID is required.' });
+    }
+
+    const result = await query(
+      `SELECT r.id, r.problem, r.description, r.address, r.status, r.created_at, r.updated_at,
+              s.name AS service_name, s.base_price_estimate,
+              c.name AS customer_name, c.phone AS customer_phone,
+              p.amount, p.payment_method, p.receipt_no, p.created_at AS payment_date
+       FROM requests r
+       JOIN services s ON r.service_id = s.id
+       JOIN customers c ON r.customer_id = c.id
+       LEFT JOIN payments p ON p.request_id = r.id
+       WHERE r.partner_id = $1 AND r.status = 'payment_completed'
+       ORDER BY r.updated_at DESC`,
+      [partnerId]
+    );
+
+    const rows = result.rows;
+    const totalJobs = rows.length;
+
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    let todayJobs = 0;
+    let thisWeekJobs = 0;
+
+    const dayMap = {};
+    const serviceMap = {};
+
+    const ledger = rows.map((row) => {
+      const orderNum = `ORD-${String(row.id).replace(/-/g, '').slice(0, 4).toUpperCase()}`;
+      const jobDate = new Date(row.updated_at || row.created_at);
+      const dayKey = jobDate.toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+
+      if (jobDate.toISOString().slice(0, 10) === todayStr) {
+        todayJobs += 1;
+      }
+      if (jobDate >= startOfWeek) {
+        thisWeekJobs += 1;
+      }
+
+      dayMap[dayKey] = (dayMap[dayKey] || 0) + 1;
+      serviceMap[row.service_name] = (serviceMap[row.service_name] || 0) + 1;
+
+      return {
+        id: row.id,
+        order_number: orderNum,
+        customer_name: row.customer_name,
+        service_name: row.service_name,
+        problem: row.problem,
+        payment_mode: row.payment_method || 'Direct UPI / Cash (On-site)',
+        date: row.payment_date || row.updated_at || row.created_at,
+        receipt_no: row.receipt_no,
+        status: 'payment_received',
+      };
+    });
+
+    const breakdownByDay = Object.entries(dayMap).map(([date, count]) => ({
+      date,
+      count,
+      label: `${count} job${count > 1 ? 's' : ''}`,
+    }));
+
+    const breakdownByService = Object.entries(serviceMap).map(([service, count]) => ({
+      service,
+      count,
+      label: `${count} job${count > 1 ? 's' : ''}`,
+    }));
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        partner_id: partnerId,
+        total_jobs: totalJobs,
+        today_jobs: todayJobs,
+        this_week_jobs: thisWeekJobs,
+        breakdown_by_day: breakdownByDay,
+        breakdown_by_service: breakdownByService,
+        ledger,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export default {
   getSubscriptionPlans,
   getPartnerSubscription,
@@ -955,4 +1057,5 @@ export default {
   togglePartnerOnline,
   getAdminKycList,
   getPartnerRatings,
+  getPartnerEarnings,
 };

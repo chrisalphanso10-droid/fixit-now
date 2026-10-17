@@ -90,6 +90,45 @@ export default function CustomerLayout({
       ),
     },
     {
+      id: 'notifications',
+      label: 'Alerts',
+      icon: (
+        <svg
+          viewBox="0 0 24 24"
+          className="w-5 h-5 stroke-current fill-none"
+          strokeWidth="2"
+          strokeLinecap="square"
+          strokeLinejoin="miter"
+          aria-hidden="true"
+        >
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+      ),
+    },
+    {
+      id: 'support',
+      label: 'Support',
+      desktopOnly: true,
+      icon: (
+        <svg
+          viewBox="0 0 24 24"
+          className="w-5 h-5 stroke-current fill-none"
+          strokeWidth="2"
+          strokeLinecap="square"
+          strokeLinejoin="miter"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <circle cx="12" cy="12" r="4" />
+          <line x1="4.93" y1="4.93" x2="9.17" y2="9.17" />
+          <line x1="14.83" y1="14.83" x2="19.07" y2="19.07" />
+          <line x1="14.83" y1="9.17" x2="19.07" y2="4.93" />
+          <line x1="4.93" y1="19.07" x2="9.17" y2="14.83" />
+        </svg>
+      ),
+    },
+    {
       id: 'profile',
       label: 'Profile',
       icon: (

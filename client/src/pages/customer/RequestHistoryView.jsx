@@ -4,29 +4,33 @@
  * Conforms to SRS FR-C7 and docs/DESIGN.md.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getRequestHistory } from '../../services/requestService';
 
 export default function RequestHistoryView({ onNavigate }) {
   const [filter, setFilter] = useState('all'); // 'all' | 'completed' | 'cancelled'
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [selectedReceipt, setSelectedReceipt] = useState(null);
 
-  useEffect(() => {
-    async function loadHistory() {
-      setLoading(true);
-      try {
-        const data = await getRequestHistory(filter);
-        setRequests(data);
-      } catch (err) {
-        console.error('Failed to load history:', err);
-      } finally {
-        setLoading(false);
-      }
+  const loadHistory = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getRequestHistory(filter);
+      setRequests(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to load history:', err);
+      setError(err.message || 'Failed to retrieve request history.');
+    } finally {
+      setLoading(false);
     }
-    loadHistory();
   }, [filter]);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -48,7 +52,7 @@ export default function RequestHistoryView({ onNavigate }) {
               type="button"
               key={tab}
               onClick={() => setFilter(tab)}
-              className={`px-3 py-1 font-mono text-xs font-bold uppercase transition-colors ${
+              className={`px-3 py-1 font-mono text-xs font-bold uppercase transition-colors cursor-pointer ${
                 filter === tab
                   ? 'bg-signal text-ink'
                   : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-main)]'
@@ -63,13 +67,34 @@ export default function RequestHistoryView({ onNavigate }) {
       {/* Loading State */}
       {loading ? (
         <div className="space-y-4">
-          <div className="ruler-strip animate-ruler-sweep my-4" />
+          <div className="p-8 text-center border-2 border-[var(--theme-border)] bg-[var(--theme-surface)]">
+            <div className="inline-block w-6 h-6 border-2 border-signal border-t-transparent animate-spin mb-2" />
+            <p className="font-mono text-xs uppercase tracking-widest text-[var(--theme-text-soft)]">
+              LOADING ARCHIVED WORK ORDERS...
+            </p>
+          </div>
           {[1, 2].map((n) => (
             <div
               key={n}
-              className="h-32 bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] animate-pulse"
+              className="h-28 bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] animate-pulse"
             />
           ))}
+        </div>
+      ) : error ? (
+        /* Error State */
+        <div className="p-6 border-2 border-dashed border-signal bg-[var(--theme-surface)] space-y-3">
+          <div className="flex items-center gap-2 text-signal font-mono text-xs font-bold uppercase">
+            <span>[!]</span>
+            <span>Failed to load request history</span>
+          </div>
+          <p className="font-sans text-sm text-[var(--theme-text-main)]">{error}</p>
+          <button
+            type="button"
+            onClick={loadHistory}
+            className="px-4 py-1.5 border-2 border-ink bg-ink text-paper font-mono text-xs font-bold uppercase hover:bg-signal hover:text-ink cursor-pointer"
+          >
+            Retry
+          </button>
         </div>
       ) : requests.length === 0 ? (
         /* Empty State */
@@ -87,7 +112,7 @@ export default function RequestHistoryView({ onNavigate }) {
           <button
             type="button"
             onClick={() => onNavigate('new-request')}
-            className="btn-primary min-h-[44px] text-xs"
+            className="btn-primary min-h-[44px] text-xs cursor-pointer"
           >
             Create Your First Request →
           </button>
@@ -98,6 +123,9 @@ export default function RequestHistoryView({ onNavigate }) {
           {requests.map((req) => {
             const isCompleted = req.status === 'completed' || req.status === 'payment_completed';
             const isCancelled = req.status === 'cancelled';
+            const orderNum =
+              req.order_number ||
+              `ORD-${String(req.id || '').replace(/-/g, '').slice(0, 4).toUpperCase()}`;
 
             return (
               <div
@@ -108,7 +136,7 @@ export default function RequestHistoryView({ onNavigate }) {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b-2 border-dashed border-[var(--theme-border)] pb-3">
                   <div className="flex items-center gap-3">
                     <span className="font-mono text-xs font-bold text-signal uppercase tracking-wider">
-                      {req.order_number}
+                      {orderNum}
                     </span>
                     <span className="font-mono text-xs text-[var(--theme-text-muted)]">
                       {new Date(req.created_at).toLocaleDateString('en-IN', {
@@ -189,9 +217,9 @@ export default function RequestHistoryView({ onNavigate }) {
                       <button
                         type="button"
                         onClick={() => setSelectedReceipt(req)}
-                        className="btn-secondary py-1.5 px-3 text-xs min-h-[38px] w-full sm:w-auto"
+                        className="btn-secondary py-1.5 px-3 text-xs min-h-[38px] w-full sm:w-auto cursor-pointer"
                       >
-                        View Receipt 📄
+                        View Receipt
                       </button>
                     )}
                   </div>
@@ -207,7 +235,7 @@ export default function RequestHistoryView({ onNavigate }) {
       {/* ============================================================== */}
       {selectedReceipt && (
         <div
-          className="fixed inset-0 z-50 bg-ink/75 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-ink/75 flex items-center justify-center p-4 animate-fade-in"
           role="dialog"
           aria-modal="true"
         >
@@ -219,13 +247,21 @@ export default function RequestHistoryView({ onNavigate }) {
               <button
                 type="button"
                 onClick={() => setSelectedReceipt(null)}
-                className="font-bold text-sm"
+                className="font-bold text-sm cursor-pointer p-1"
+                aria-label="Close"
               >
                 ✕
               </button>
             </div>
 
             <div className="space-y-3 font-mono text-xs">
+              <div className="flex justify-between border-b border-ink/20 pb-2">
+                <span className="text-muted">RECEIPT NO:</span>
+                <span className="font-bold text-ink">
+                  {selectedReceipt.receipt_no ||
+                    `REC-${String(selectedReceipt.order_number || selectedReceipt.id).replace(/[^0-9]/g, '').slice(-4) || '0428'}-01`}
+                </span>
+              </div>
               <div className="flex justify-between border-b border-ink/20 pb-2">
                 <span className="text-muted">ORDER NUMBER:</span>
                 <span className="font-bold text-ink">{selectedReceipt.order_number}</span>
@@ -245,19 +281,28 @@ export default function RequestHistoryView({ onNavigate }) {
                 <span className="font-bold text-done uppercase">COMPLETED &amp; CONFIRMED</span>
               </div>
               <div className="flex justify-between border-b border-ink/20 pb-2">
-                <span className="text-muted">PAYMENT:</span>
-                <span className="font-bold text-ink uppercase">SETTLED DIRECTLY ON-SITE</span>
+                <span className="text-muted">SETTLEMENT METHOD:</span>
+                <span className="font-bold text-ink uppercase">
+                  {selectedReceipt.payment_method || 'DIRECT ON-SITE (UPI / CASH)'}
+                </span>
               </div>
               <div className="p-3 bg-concrete border border-ink text-[11px] text-soft">
                 {selectedReceipt.problem}
               </div>
             </div>
 
-            <div className="pt-2">
+            <div className="pt-2 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="btn-secondary py-1.5 px-4 text-xs min-h-[40px] cursor-pointer"
+              >
+                Print Receipt
+              </button>
               <button
                 type="button"
                 onClick={() => setSelectedReceipt(null)}
-                className="btn-primary w-full min-h-[44px]"
+                className="btn-primary min-h-[40px] px-6 text-xs cursor-pointer"
               >
                 Close Receipt
               </button>
