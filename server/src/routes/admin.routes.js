@@ -14,6 +14,7 @@ import { loginAdmin } from '../controllers/auth.controller.js';
 import { getAdminKycList } from '../controllers/partner.controller.js';
 import {
   getAdminDashboard,
+  getAdminAnalytics,
   getAdminCustomers,
   getAdminPartners,
   rejectCustomerPartnerMutation,
@@ -45,9 +46,10 @@ router.use(authenticateToken);
 router.use(requireRole('admin'));
 
 // -----------------------------------------------------------------------------
-// Dashboard Overview (FR-A2, FR-A7)
+// Dashboard Overview & Analytics (FR-A2, FR-A7)
 // -----------------------------------------------------------------------------
 router.get('/dashboard', getAdminDashboard);
+router.get('/analytics', getAdminAnalytics);
 
 // -----------------------------------------------------------------------------
 // KYC Verification Queue & Decision (FR-A4, FR-P5)

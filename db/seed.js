@@ -415,6 +415,290 @@ async function runSeed() {
       );
     `);
 
+    // =========================================================================
+    // 6. PHASE 9: EXTENDED DEMO HISTORY FOR ADMIN ANALYTICS (FR-A7, FR-A2)
+    // Seeds multi-month customer & partner cohorts, subscriptions, and requests
+    // with peak hours, varied services, completion vs cancellation, and ratings.
+    // =========================================================================
+    console.log('Seeding Phase 9 Demo History for Admin Analytics...');
+
+    // 6.1 Cohort of historical customers spread May - Oct 2026
+    const historicalCustomers = [
+      { name: 'Kavita Das', email: 'kavita.das@demo.local', phone: '+91 98451 22331', address: '12, 4th Main, HAL 2nd Stage, Indiranagar', lat: 12.9752, lng: 77.6385, created_at: '2026-05-12T10:15:00Z' },
+      { name: 'Rohan Sen', email: 'rohan.sen@demo.local', phone: '+91 98452 33442', address: '45, 100ft Road, Indiranagar', lat: 12.9781, lng: 77.6412, created_at: '2026-05-24T14:30:00Z' },
+      { name: 'Sneha Pillai', email: 'sneha.pillai@demo.local', phone: '+91 98453 44553', address: '78, CMH Road, Indiranagar', lat: 12.9795, lng: 77.6378, created_at: '2026-06-08T09:45:00Z' },
+      { name: 'Vikram Malhotra', email: 'vikram.malhotra@demo.local', phone: '+91 98454 55664', address: '18, Old Airport Road, Domlur', lat: 12.9620, lng: 77.6450, created_at: '2026-06-22T17:20:00Z' },
+      { name: 'Arvind Swamy', email: 'arvind.swamy@demo.local', phone: '+91 98455 66775', address: '9, Cambridge Road, Ulsoor', lat: 12.9725, lng: 77.6290, created_at: '2026-07-05T11:10:00Z' },
+      { name: 'Divya Iyer', email: 'divya.iyer@demo.local', phone: '+91 98456 77886', address: '34, 12th Main, Indiranagar', lat: 12.9738, lng: 77.6362, created_at: '2026-07-19T18:40:00Z' },
+      { name: 'Nikhil Reddy', email: 'nikhil.reddy@demo.local', phone: '+91 98457 88997', address: '88, Defence Colony, Indiranagar', lat: 12.9812, lng: 77.6448, created_at: '2026-08-04T12:05:00Z' },
+      { name: 'Meera Nambiar', email: 'meera.nambiar@demo.local', phone: '+91 98458 99008', address: '6, Murphy Town, Ulsoor', lat: 12.9820, lng: 77.6250, created_at: '2026-08-21T16:50:00Z' },
+      { name: 'Sanjay Kulkarni', email: 'sanjay.kulkarni@demo.local', phone: '+91 98459 10119', address: '55, 6th Cross, Indiranagar', lat: 12.9765, lng: 77.6395, created_at: '2026-09-02T10:30:00Z' },
+      { name: 'Varun Hegde', email: 'varun.hegde@demo.local', phone: '+91 98450 21220', address: '101, HAL 3rd Stage, Indiranagar', lat: 12.9690, lng: 77.6520, created_at: '2026-09-15T15:15:00Z' },
+      { name: 'Pooja Joshi', email: 'pooja.joshi@demo.local', phone: '+91 98451 32331', address: '22, Thippasandra Main Road', lat: 12.9730, lng: 77.6560, created_at: '2026-09-28T18:10:00Z' },
+      { name: 'Ritu Varma', email: 'ritu.varma@demo.local', phone: '+91 98452 43442', address: '7, 1st Stage, Domlur Layout', lat: 12.9645, lng: 77.6380, created_at: '2026-10-04T11:45:00Z' },
+      { name: 'Harish Chander', email: 'harish.chander@demo.local', phone: '+91 98453 54553', address: '14, Kodihalli Main Road, HAL', lat: 12.9660, lng: 77.6480, created_at: '2026-10-10T17:35:00Z' },
+    ];
+
+    const customerIds = [];
+    for (const c of historicalCustomers) {
+      const cRes = await client.query(
+        `INSERT INTO customers (name, email, password_hash, phone, address, latitude, longitude, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+         ON CONFLICT (email) DO UPDATE SET created_at = EXCLUDED.created_at
+         RETURNING id`,
+        [c.name, c.email, customerPasswordHash, c.phone, c.address, c.lat, c.lng, c.created_at]
+      );
+      customerIds.push(cRes.rows[0].id);
+    }
+
+    // 6.2 Cohort of historical partners spread May - Oct 2026
+    const historicalPartners = [
+      { name: 'Kiran Patel', email: 'kiran.ac@fixitnow.local', phone: '+91 97410 11223', address: '12, CMH Road, Indiranagar', service_slug: 'ac-repair', online: true, lat: 12.976, lng: 77.638, kyc: 'verified', rating: 4.95, jobs: 156, badge: 'HVAC Certified Specialist', created_at: '2026-05-02T08:00:00Z', plan: 'yearly' },
+      { name: 'Amit Verma', email: 'amit.electric@fixitnow.local', phone: '+91 98220 44332', address: '44, 100ft Road, Indiranagar', service_slug: 'electrician', online: true, lat: 12.978, lng: 77.642, kyc: 'verified', rating: 4.88, jobs: 94, badge: 'Industrial Wiring Expert', created_at: '2026-06-12T14:00:00Z', plan: 'half-yearly' },
+      { name: 'Gopal Verma', email: 'gopal.carpenter@fixitnow.local', phone: '+91 94490 55667', address: '16, Old Airport Road, Domlur', service_slug: 'carpenter', online: true, lat: 12.963, lng: 77.646, kyc: 'verified', rating: 4.84, jobs: 78, badge: 'Senior Furniture Joiner', created_at: '2026-07-18T10:45:00Z', plan: 'quarterly' },
+      { name: 'Priya Sundaram', email: 'priya.appliance@fixitnow.local', phone: '+91 98330 66778', address: '8, Murphy Town, Ulsoor', service_slug: 'appliance-repair', online: true, lat: 12.9815, lng: 77.626, kyc: 'verified', rating: 4.86, jobs: 82, badge: 'Appliance Specialist', created_at: '2026-08-01T12:00:00Z', plan: 'half-yearly' },
+      { name: 'Farhan Akhtar', email: 'farhan.ac@fixitnow.local', phone: '+91 97412 88291', address: '30, 100ft Road, Indiranagar', service_slug: 'ac-repair', online: false, lat: 12.9770, lng: 77.6410, kyc: 'verified', rating: 4.79, jobs: 54, badge: 'Split AC Specialist', created_at: '2026-09-05T09:00:00Z', plan: 'quarterly' },
+    ];
+
+    const partnerIdMap = {};
+    for (const hp of historicalPartners) {
+      const servId = serviceMap[hp.service_slug] || Object.values(serviceMap)[0];
+      const pRes = await client.query(
+        `INSERT INTO partners (
+           name, email, password_hash, phone, address,
+           service_id, online, latitude, longitude,
+           kyc_status, rating, total_jobs, badge, created_at, updated_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)
+         ON CONFLICT (email) DO UPDATE SET
+           rating = EXCLUDED.rating,
+           total_jobs = EXCLUDED.total_jobs,
+           created_at = EXCLUDED.created_at
+         RETURNING id`,
+        [hp.name, hp.email, partnerPasswordHash, hp.phone, hp.address, servId, hp.online, hp.lat, hp.lng, hp.kyc, hp.rating, hp.jobs, hp.badge, hp.created_at]
+      );
+      partnerIdMap[hp.email] = pRes.rows[0].id;
+
+      // Seed monthly subscriptions for revenue chart across all 6 months
+      const pPlanId = planMap[hp.plan] || Object.values(planMap)[0];
+      const pPlanPrice = hp.plan === 'yearly' ? 2799 : hp.plan === 'half-yearly' ? 1599 : 899;
+      await client.query(
+        `INSERT INTO subscriptions (partner_id, plan_id, price_paid, start_date, end_date, status, created_at)
+         VALUES ($1, $2, $3, $4::timestamptz, $4::timestamptz + INTERVAL '180 days', 'active', $4::timestamptz)
+         ON CONFLICT DO NOTHING`,
+        [pRes.rows[0].id, pPlanId, pPlanPrice, hp.created_at]
+      );
+    }
+
+    // 6.3 Additional monthly subscriptions to ensure rich revenue data in every single month
+    const extraMonthlySubs = [
+      { month: '2026-05-10T10:00:00Z', price: 2799.00 },
+      { month: '2026-05-22T14:00:00Z', price: 1599.00 },
+      { month: '2026-06-05T09:30:00Z', price: 2799.00 },
+      { month: '2026-06-18T16:00:00Z', price: 1599.00 },
+      { month: '2026-06-27T11:00:00Z', price: 899.00 },
+      { month: '2026-07-04T10:15:00Z', price: 2799.00 },
+      { month: '2026-07-16T15:00:00Z', price: 1599.00 },
+      { month: '2026-07-28T18:00:00Z', price: 1599.00 },
+      { month: '2026-08-08T12:00:00Z', price: 2799.00 },
+      { month: '2026-08-19T14:30:00Z', price: 2799.00 },
+      { month: '2026-08-29T17:00:00Z', price: 899.00 },
+      { month: '2026-09-03T09:00:00Z', price: 2799.00 },
+      { month: '2026-09-14T11:30:00Z', price: 1599.00 },
+      { month: '2026-09-25T16:45:00Z', price: 2799.00 },
+      { month: '2026-10-02T10:00:00Z', price: 2799.00 },
+      { month: '2026-10-08T14:00:00Z', price: 1599.00 },
+      { month: '2026-10-12T17:30:00Z', price: 899.00 },
+    ];
+
+    const allPartnersRes = await client.query('SELECT id FROM partners');
+    const allPartnerIds = allPartnersRes.rows.map((r) => r.id);
+    for (let i = 0; i < extraMonthlySubs.length; i++) {
+      const sub = extraMonthlySubs[i];
+      const partnerId = allPartnerIds[i % allPartnerIds.length];
+      const planId = sub.price === 2799 ? planMap['yearly'] : sub.price === 1599 ? planMap['half-yearly'] : planMap['quarterly'];
+      await client.query(
+        `INSERT INTO subscriptions (partner_id, plan_id, price_paid, start_date, end_date, status, created_at)
+         VALUES ($1, $2, $3, $4::timestamptz, $4::timestamptz + INTERVAL '180 days', 'active', $4::timestamptz)`,
+        [partnerId, planId, sub.price, sub.month]
+      );
+    }
+
+    // 6.4 Clean up previous historical seed requests to prevent accumulation on re-seeds
+    await client.query("DELETE FROM requests WHERE description LIKE '%[Historical Seed]%'");
+
+    // 6.5 Generate ~135 historical requests spanning May to October 2026
+    const serviceProblems = {
+      plumber: [
+        'Under-sink kitchen drain pipe leaking profusely',
+        'Overhead water tank ball valve jammed',
+        'Flush valve tank overflowing continuously',
+        'Bathroom washbasin tap dripping constantly',
+        'Shower mixer cartridge jammed and stiff',
+      ],
+      electrician: [
+        'Main circuit breaker tripping intermittently under load',
+        'Short circuit in master bedroom switchboard',
+        'Ceiling fan regulator sparking and overheating',
+        'Exhaust fan motor jammed in kitchen',
+        'Power socket burnt out behind refrigerator',
+      ],
+      'ac-repair': [
+        'Split AC not blowing cold air, outdoor fan silent',
+        'Water leaking from indoor AC blower unit onto sofa',
+        'AC compressor making loud humming and rattling sound',
+        'Filter cleaning and seasonal refrigerant top-up',
+        'AC turning off automatically after 10 minutes run',
+      ],
+      carpenter: [
+        'Front main door wooden lock deadbolt jammed',
+        'Wardrobe double hinge loose and sagging against frame',
+        'Kitchen drawer sliding track stuck and derailed',
+        'Teak wood dining chair leg loose and creaking',
+        'Balcony mosquito mesh door frame misaligned',
+      ],
+      'appliance-repair': [
+        'Front-load washing machine drum not spinning during drain',
+        'Microwave glass turntable plate not heating food',
+        'Double door refrigerator frost buildup and warm cooling',
+        'Electric chimney suction motor vibrating loudly',
+        'Water purifier UV lamp alert beeping continuously',
+      ],
+    };
+
+    const reviewComments = [
+      'Prompt arrival and excellent workmanship! Cleaned up the area after finishing.',
+      'Very skilled technician. Fixed the issue in under 20 minutes with genuine spares.',
+      'Professional, courteous and clearly explained the fix. Highly recommended.',
+      'Arrived right on time and had all required tools ready in his kit.',
+      'Superb work! Solved the issue that two previous handymen failed to address.',
+      'Quick response and neat finish. Very satisfied with the service quality.',
+    ];
+
+    const monthsConfig = [
+      { month: 5, year: 2026, count: 18 },
+      { month: 6, year: 2026, count: 24 },
+      { month: 7, year: 2026, count: 28 },
+      { month: 8, year: 2026, count: 32 },
+      { month: 9, year: 2026, count: 36 },
+      { month: 10, year: 2026, count: 26 },
+    ];
+
+    const serviceSlugs = ['plumber', 'electrician', 'ac-repair', 'carpenter', 'appliance-repair'];
+    // Weighted selection for services: plumber (35%), electrician (25%), ac-repair (18%), carpenter (12%), appliance-repair (10%)
+    const serviceWeights = ['plumber', 'plumber', 'plumber', 'electrician', 'electrician', 'ac-repair', 'ac-repair', 'carpenter', 'appliance-repair'];
+
+    // Peak hours distribution: morning rush (10-12) & evening surge (17-19)
+    const peakHourPool = [
+      7, 8, 8, 9, 9, 9,
+      10, 10, 10, 11, 11, 11, 11, 12, 12, 12,
+      13, 13, 14, 15, 15, 16, 16,
+      17, 17, 17, 18, 18, 18, 18, 19, 19, 19,
+      20, 20, 21, 21
+    ];
+
+    let totalHistoricalCreated = 0;
+
+    for (const mConf of monthsConfig) {
+      for (let i = 0; i < mConf.count; i++) {
+        const servSlug = serviceWeights[i % serviceWeights.length];
+        const servId = serviceMap[servSlug] || Object.values(serviceMap)[0];
+        const problems = serviceProblems[servSlug] || serviceProblems.plumber;
+        const problem = problems[i % problems.length];
+        const custId = customerIds[i % customerIds.length];
+        const partId = allPartnerIds[i % allPartnerIds.length];
+
+        // Pick date and peak hour
+        const day = 1 + (i % 27);
+        const hour = peakHourPool[(i * 3 + mConf.month) % peakHourPool.length];
+        const minute = (i * 7) % 60;
+        const dateStr = `${mConf.year}-${String(mConf.month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+05:30`;
+
+        // 88% completed, 8% customer cancelled, 4% busy timeout
+        let status = 'payment_completed';
+        let cancelReason = null;
+        if (i % 12 === 11) {
+          status = 'cancelled';
+          cancelReason = 'All partners busy, try again later';
+        } else if (i % 12 === 10) {
+          status = 'cancelled';
+          cancelReason = 'Customer had an emergency reschedule';
+        }
+
+        const reqRes = await client.query(
+          `INSERT INTO requests (
+             customer_id, partner_id, service_id, problem, description,
+             address, latitude, longitude, status, cancel_reason,
+             service_otp, created_at, updated_at
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::timestamptz, $12::timestamptz + INTERVAL '45 minutes')
+           RETURNING id`,
+          [
+            custId,
+            status === 'payment_completed' ? partId : (cancelReason?.includes('busy') ? null : partId),
+            servId,
+            problem,
+            `Verified customer reported: ${problem}. [Historical Seed]`,
+            'Indiranagar 100ft Road, Bengaluru',
+            12.9784,
+            77.6408,
+            status,
+            cancelReason,
+            '482910',
+            dateStr,
+          ]
+        );
+
+        const newReqId = reqRes.rows[0].id;
+        totalHistoricalCreated++;
+
+        // Add payment & rating for completed jobs
+        if (status === 'payment_completed') {
+          const recNo = `REC-${String(mConf.year).slice(2)}${String(mConf.month).padStart(2, '0')}-${String(1000 + (totalHistoricalCreated % 9000))}`;
+          await client.query(
+            `INSERT INTO payments (request_id, amount, status, receipt_no, created_at)
+             VALUES ($1, 400.00, 'successful', $2, $3::timestamptz + INTERVAL '40 minutes')
+             ON CONFLICT DO NOTHING`,
+            [newReqId, recNo, dateStr]
+          );
+
+          const stars = (i % 5 === 0) ? 4 : 5;
+          const comment = reviewComments[(i + mConf.month) % reviewComments.length];
+          await client.query(
+            `INSERT INTO ratings (request_id, partner_id, stars, comment, created_at)
+             VALUES ($1, $2, $3, $4, $5::timestamptz + INTERVAL '45 minutes')`,
+            [newReqId, partId, stars, comment, dateStr]
+          );
+        }
+      }
+    }
+
+    // 6.6 Seed 1 live active job in progress right now for the Live Users Monitor
+    const activePartnerRes = await client.query("SELECT id, name FROM partners WHERE online = true LIMIT 1");
+    if (activePartnerRes.rows.length > 0 && customerIds.length > 0) {
+      const livePart = activePartnerRes.rows[0];
+      await client.query(
+        `INSERT INTO requests (
+           customer_id, partner_id, service_id, problem, description,
+           address, latitude, longitude, status, service_otp, created_at, updated_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'service_started', '582914', CURRENT_TIMESTAMP - INTERVAL '15 minutes', CURRENT_TIMESTAMP)
+         RETURNING id`,
+        [
+          customerIds[0],
+          livePart.id,
+          Object.values(serviceMap)[0],
+          'Under-sink pipe dripping onto cabinet floor',
+          'Active ongoing job for live field dispatch monitor. [Historical Seed]',
+          '54, 12th Main Road, Indiranagar, Bengaluru',
+          12.9740,
+          77.6350,
+        ]
+      );
+    }
+
+    console.log(`✓ Seeded ${totalHistoricalCreated} historical requests across May - Oct 2026 with ratings and payments.`);
+
     await client.query('COMMIT');
     console.log('✓ FixIt Now database seed completed successfully!');
   } catch (err) {

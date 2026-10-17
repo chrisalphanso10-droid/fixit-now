@@ -170,17 +170,22 @@ export default function AdminPartnersView() {
                       </span>
                     </td>
                     <td className="p-3.5 border-r border-[var(--theme-border)] text-center">
-                      <span
-                        className={`text-[10px] font-bold ${
-                          partner.subscription_status === 'active'
-                            ? 'text-done'
-                            : partner.subscription_status === 'warning'
-                              ? 'text-signal'
-                              : 'text-[#B83A14]'
-                        }`}
-                      >
-                        {partner.subscription_status?.toUpperCase()}
-                      </span>
+                      <div className="font-bold text-signal uppercase text-[11px]">
+                        {partner.plan_names || partner.plan_name || partner.plan || 'No Plan'}
+                      </div>
+                      {partner.subscription_status && partner.subscription_status !== 'none' && (
+                        <span
+                          className={`inline-block text-[9px] uppercase font-mono px-1 py-0.5 border mt-0.5 ${
+                            partner.subscription_status === 'active'
+                              ? 'text-done border-done bg-[#EAF8F0] dark:bg-[#0D2E1A]'
+                              : partner.subscription_status === 'warning'
+                                ? 'text-signal border-signal bg-[#FFF5F2] dark:bg-[#2D1610]'
+                                : 'text-[#B83A14] border-[#B83A14]'
+                          }`}
+                        >
+                          {partner.subscription_status}
+                        </span>
+                      )}
                     </td>
                     <td className="p-3.5 border-r border-[var(--theme-border)] text-center font-bold text-done">
                       {partner.rating} ★
@@ -248,17 +253,22 @@ export default function AdminPartnersView() {
                   </div>
                   <div>
                     <span className="text-[9px] text-[var(--theme-text-muted)] block uppercase">PLAN</span>
-                    <span
-                      className={`font-bold ${
-                        partner.subscription_status === 'active'
-                          ? 'text-done'
-                          : partner.subscription_status === 'warning'
-                            ? 'text-signal'
-                            : 'text-[#B83A14]'
-                      }`}
-                    >
-                      {partner.subscription_status?.toUpperCase()}
+                    <span className="font-bold text-signal uppercase text-[10px] block">
+                      {partner.plan_names || partner.plan_name || partner.plan || 'No Plan'}
                     </span>
+                    {partner.subscription_status && partner.subscription_status !== 'none' && (
+                      <span
+                        className={`text-[9px] uppercase font-bold ${
+                          partner.subscription_status === 'active'
+                            ? 'text-done'
+                            : partner.subscription_status === 'warning'
+                              ? 'text-signal'
+                              : 'text-[#B83A14]'
+                        }`}
+                      >
+                        {partner.subscription_status}
+                      </span>
+                    )}
                   </div>
                 </div>
 

@@ -126,7 +126,11 @@ export default function AdminSubscriptionsView() {
                       {new Date(sub.end_date).toLocaleDateString()}
                     </td>
                     <td className="p-3.5 border-r border-[var(--theme-border)] text-center font-bold">
-                      {sub.days_remaining} Days
+                      <span className={(sub.days_remaining ?? Math.max(0, Math.ceil((new Date(sub.end_date) - new Date()) / 86400000))) > 0 ? 'text-[var(--theme-text-main)]' : 'text-[#B83A14]'}>
+                        {sub.days_remaining !== undefined && sub.days_remaining !== null
+                          ? sub.days_remaining
+                          : Math.max(0, Math.ceil((new Date(sub.end_date) - new Date()) / 86400000))} Days
+                      </span>
                     </td>
                     <td className="p-3.5 text-center">
                       <span
@@ -193,7 +197,11 @@ export default function AdminSubscriptionsView() {
 
                 <div className="flex items-center justify-between text-[11px] pt-1">
                   <span className="text-[var(--theme-text-muted)]">
-                    Days Remaining: <strong className="text-[var(--theme-text-main)]">{sub.days_remaining}d</strong>
+                    Days Remaining: <strong className={(sub.days_remaining ?? Math.max(0, Math.ceil((new Date(sub.end_date) - new Date()) / 86400000))) > 0 ? 'text-[var(--theme-text-main)]' : 'text-[#B83A14]'}>
+                      {sub.days_remaining !== undefined && sub.days_remaining !== null
+                        ? sub.days_remaining
+                        : Math.max(0, Math.ceil((new Date(sub.end_date) - new Date()) / 86400000))}d
+                    </strong>
                   </span>
                   <span className="text-[var(--theme-text-muted)]">
                     Expires: {new Date(sub.end_date).toLocaleDateString()}

@@ -98,10 +98,9 @@ export function adminLogout() {
  */
 
 function getFallbackDashboardData(stats = {}, recentActivity = []) {
-  const totalRequests = stats.total_requests || 648;
-  const completedRequests = stats.completed_requests || Math.round(totalRequests * 0.903);
-  const cancelledRequests = stats.cancelled_requests || Math.round(totalRequests * 0.074);
-  const unassignedTimeouts = Math.max(0, totalRequests - completedRequests - cancelledRequests);
+  const totalRequests = stats.total_requests || 0;
+  const completedRequests = stats.completed_requests || 0;
+  const cancelledRequests = stats.cancelled_requests || 0;
 
   return {
     analytics: {
@@ -109,98 +108,31 @@ function getFallbackDashboardData(stats = {}, recentActivity = []) {
         total_requests: totalRequests,
         completed_requests: completedRequests,
         cancelled_requests: cancelledRequests,
-        unassigned_timeouts: unassignedTimeouts,
-        subscription_revenue: stats.total_subscription_revenue || 92890,
-        active_partners: stats.total_partners || 86,
-        total_customers: stats.total_customers || 242,
+        unassigned_timeouts: 0,
+        subscription_revenue: stats.total_subscription_revenue || 0,
+        active_partners: stats.total_partners || 0,
+        total_customers: stats.total_customers || 0,
         pending_kyc: stats.pending_kyc_count || 0,
-        completion_rate: totalRequests > 0 ? `${Math.round((completedRequests / totalRequests) * 100)}%` : '90.3%',
-        avg_arrival_minutes: 16.4,
-        average_rating: 4.9,
-        growth_rate: '+18.4%',
+        completion_rate: totalRequests > 0 ? `${Math.round((completedRequests / totalRequests) * 100)}%` : '0%',
+        avg_arrival_minutes: 15.0,
+        average_rating: 5.0,
+        growth_rate: '+0%',
       },
-      requestsOverTime: [
-        { period: 'May 2026', total: 64, completed: 57, cancelled: 7 },
-        { period: 'Jun 2026', total: 88, completed: 79, cancelled: 9 },
-        { period: 'Jul 2026', total: 112, completed: 101, cancelled: 11 },
-        { period: 'Aug 2026', total: 135, completed: 124, cancelled: 11 },
-        { period: 'Sep 2026', total: 160, completed: 147, cancelled: 13 },
-        {
-          period: 'Oct 2026',
-          total: totalRequests > 89 ? totalRequests : 89,
-          completed: completedRequests > 77 ? completedRequests : 77,
-          cancelled: cancelledRequests > 12 ? cancelledRequests : 12,
-        },
-      ],
-      topServices: [
-        { name: 'Plumbing Repairs', requests: 184, share: 28 },
-        { name: 'Electrical Work', requests: 156, share: 24 },
-        { name: 'AC Service & Repair', requests: 104, share: 16 },
-        { name: 'Carpentry & Woodwork', requests: 78, share: 12 },
-        { name: 'Appliance Repair', requests: 52, share: 8 },
-        { name: 'Painting & Touch-ups', requests: 38, share: 6 },
-        { name: 'Locksmith & Security', requests: 22, share: 3 },
-        { name: 'Masonry & Tile Fixes', requests: 14, share: 3 },
-      ],
-      completionVsCancellation: [
-        { name: 'Completed & Paid', value: completedRequests || 585, color: '#1E8C4E' },
-        { name: 'Customer Cancelled', value: cancelledRequests || 48, color: '#FF5B14' },
-        { name: 'Unmatched / Timeout', value: unassignedTimeouts || 15, color: '#6B7079' },
-      ],
-      growthMetrics: [
-        { month: 'May', customers: 48, partners: 18 },
-        { month: 'Jun', customers: 85, partners: 32 },
-        { month: 'Jul', customers: 130, partners: 49 },
-        { month: 'Aug', customers: 178, partners: 66 },
-        { month: 'Sep', customers: 215, partners: 78 },
-        { month: 'Oct', customers: stats.total_customers || 242, partners: stats.total_partners || 86 },
-      ],
-      subscriptionRevenue: [
-        { month: 'May', revenue: 26970, new_subscriptions: 18 },
-        { month: 'Jun', revenue: 38960, new_subscriptions: 24 },
-        { month: 'Jul', revenue: 51940, new_subscriptions: 31 },
-        { month: 'Aug', revenue: 64930, new_subscriptions: 38 },
-        { month: 'Sep', revenue: 76920, new_subscriptions: 44 },
-        { month: 'Oct', revenue: stats.total_subscription_revenue || 92890, new_subscriptions: stats.active_subscriptions_count || 52 },
-      ],
-      peakHours: [
-        { hour: '07:00', requests: 6 },
-        { hour: '08:00', requests: 14 },
-        { hour: '09:00', requests: 28 },
-        { hour: '10:00', requests: 46 },
-        { hour: '11:00', requests: 54 },
-        { hour: '12:00', requests: 49 },
-        { hour: '13:00', requests: 35 },
-        { hour: '14:00', requests: 24 },
-        { hour: '15:00', requests: 28 },
-        { hour: '16:00', requests: 39 },
-        { hour: '17:00', requests: 58 },
-        { hour: '18:00', requests: 64 },
-        { hour: '19:00', requests: 51 },
-        { hour: '20:00', requests: 32 },
-        { hour: '21:00', requests: 15 },
-      ],
-      topRatedPartners: [
-        { rank: 1, name: 'Kiran Patel', service: 'AC Service', rating: 4.94, jobs: 156, satisfaction: '99%' },
-        { rank: 2, name: 'Sunil Mistry', service: 'Carpentry', rating: 4.92, jobs: 116, satisfaction: '98%' },
-        { rank: 3, name: 'Rajesh Kumar', service: 'Plumbing', rating: 4.90, jobs: 142, satisfaction: '98%' },
-        { rank: 4, name: 'Vikram Joshi', service: 'Appliance Repair', rating: 4.88, jobs: 84, satisfaction: '97%' },
-        { rank: 5, name: 'Ramesh Sharma', service: 'Electrical', rating: 4.85, jobs: 98, satisfaction: '96%' },
-        { rank: 6, name: 'Gopal Verma', service: 'Painting', rating: 4.81, jobs: 78, satisfaction: '95%' },
-      ],
+      requestsOverTime: [],
+      topServices: [],
+      completionVsCancellation: [],
+      growthMetrics: [],
+      subscriptionRevenue: [],
+      peakHours: [],
+      topRatedPartners: [],
     },
     liveUsers: {
-      online_partners_count: stats.online_partners_count || 14,
-      active_customers_count: stats.total_customers || 42,
-      active_jobs_count: stats.active_jobs_count || 8,
+      online_partners_count: stats.online_partners_count || 0,
+      active_customers_count: stats.total_customers || 0,
+      active_jobs_count: stats.active_jobs_count || 0,
       pending_kyc_count: stats.pending_kyc_count || 0,
-      active_subscriptions_count: stats.active_subscriptions_count || 86,
-      live_online_partners: [
-        { id: 101, name: 'Rajesh Kumar', service: 'Plumbing Repairs', status: 'on_job', order_number: 'ORD-0427' },
-        { id: 102, name: 'Ramesh Sharma', service: 'Electrical Work', status: 'available', coordinates: '12.981, 77.645' },
-        { id: 105, name: 'Kiran Patel', service: 'AC Service & Repair', status: 'available', coordinates: '12.976, 77.638' },
-        { id: 108, name: 'Gopal Verma', service: 'Painting & Touch-ups', status: 'available', coordinates: '12.973, 77.644' },
-      ],
+      active_subscriptions_count: stats.active_subscriptions_count || 0,
+      live_online_partners: [],
     },
     activityLog: recentActivity.map((r) => formatActivityLogRow(r)),
   };
@@ -209,13 +141,32 @@ function getFallbackDashboardData(stats = {}, recentActivity = []) {
 export async function getAdminDashboardData() {
   try {
     const res = await get('/api/admin/dashboard');
+    if (res?.data?.analytics) {
+      return {
+        stats: res.data.stats || {},
+        recentActivity: (res.data.recent_activity || []).map(formatActivityLogRow),
+        activityLog: (res.data.recent_activity || []).map(formatActivityLogRow),
+        analytics: res.data.analytics,
+        liveUsers: res.data.live_users || res.data.liveUsers || {},
+      };
+    }
+
     const stats = res?.data?.stats || {};
     const recentActivity = res?.data?.recent_activity || [];
-
     return getFallbackDashboardData(stats, recentActivity);
   } catch (err) {
-    console.warn('[AdminService] getAdminDashboardData using baseline data:', err.message);
+    console.warn('[AdminService] getAdminDashboardData error:', err.message);
     return getFallbackDashboardData({}, []);
+  }
+}
+
+export async function getAdminAnalyticsData() {
+  try {
+    const res = await get('/api/admin/analytics');
+    return res?.data?.analytics || null;
+  } catch (err) {
+    console.warn('[AdminService] getAdminAnalyticsData error:', err.message);
+    return null;
   }
 }
 

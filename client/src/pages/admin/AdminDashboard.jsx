@@ -57,31 +57,50 @@ function IndustrialTooltip({ active, payload, label }) {
 export default function AdminDashboard({ onNavigateTab }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    let mounted = true;
+  const loadData = () => {
+    setLoading(true);
+    setError(null);
     getAdminDashboardData()
       .then((res) => {
-        if (mounted) {
-          setData(res);
-          setLoading(false);
-        }
+        setData(res);
+        setLoading(false);
       })
       .catch((err) => {
         console.warn('[AdminDashboard] Error loading dashboard data:', err);
-        if (mounted) {
-          setLoading(false);
-        }
+        setError(err.message || 'Failed to initialize analytics engine');
+        setLoading(false);
       });
-    return () => {
-      mounted = false;
-    };
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
 
-  if (loading || !data) {
+  if (loading) {
     return (
-      <div className="p-8 text-center font-mono text-sm text-[var(--theme-text-muted)] animate-pulse">
+      <div className="p-8 text-center font-mono text-sm text-[var(--theme-text-muted)] animate-pulse border-2 border-[var(--theme-border)] bg-[var(--theme-surface)]">
         [INITIALIZING CENTRAL DISPATCH ANALYTICS ENGINE...]
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="p-8 border-2 border-ink bg-paper text-ink shadow-hard font-mono text-sm">
+        <div className="text-signal font-bold mb-2 flex items-center gap-2">
+          <span className="w-4 h-4 bg-signal text-paper inline-flex items-center justify-center text-xs">!</span>
+          ERROR CONNECTING TO ANALYTICS ENGINE
+        </div>
+        <p className="text-[var(--theme-text-soft)] mb-4">{error || 'No operational telemetry data returned.'}</p>
+        <button
+          type="button"
+          onClick={loadData}
+          className="btn-primary min-h-[40px] px-4 font-mono font-bold text-xs uppercase"
+        >
+          Retry Connection →
+        </button>
       </div>
     );
   }
@@ -97,6 +116,11 @@ export default function AdminDashboard({ onNavigateTab }) {
   const subscriptionRevenue = analytics?.subscriptionRevenue || [];
   const peakHours = analytics?.peakHours || [];
   const topRatedPartners = analytics?.topRatedPartners || [];
+
+  const maxPeakRequests = Math.max(...peakHours.map((p) => p.requests || 0), 1);
+  const sortedPeakHours = [...peakHours].sort((a, b) => (b.requests || 0) - (a.requests || 0));
+  const topHourWindow = sortedPeakHours[0]?.hour ? `${sortedPeakHours[0].hour}` : '11:00';
+  const secondaryHourWindow = sortedPeakHours[1]?.hour ? `${sortedPeakHours[1].hour}` : '18:00';
 
   return (
     <div className="space-y-8">
@@ -327,8 +351,8 @@ export default function AdminDashboard({ onNavigateTab }) {
             </ResponsiveContainer>
           </div>
           <div className="mt-3 pt-3 border-t border-[var(--theme-border)] font-mono text-[11px] text-[var(--theme-text-muted)] flex justify-between">
-            <span>Direct labeling: 6-month progression</span>
-            <span>Steady 90%+ completion rate</span>
+            <span>Direct labeling: {requestsOverTime.length || 6}-month progression</span>
+            <span>{summary.completion_rate || '90%+'} completion rate</span>
           </div>
         </div>
 
@@ -372,8 +396,8 @@ export default function AdminDashboard({ onNavigateTab }) {
             </ResponsiveContainer>
           </div>
           <div className="mt-3 pt-3 border-t border-[var(--theme-border)] font-mono text-[11px] text-[var(--theme-text-muted)] flex justify-between">
-            <span>Top category: Plumbing (28%)</span>
-            <span>Followed by Electrical (24%)</span>
+            <span>Top category: {topServices[0]?.name || 'Plumbing'} ({topServices[0]?.share || 0}%)</span>
+            <span>{topServices[1] ? `Followed by ${topServices[1].name} (${topServices[1].share}%)` : 'Consistent multi-trade demand'}</span>
           </div>
         </div>
       </div>
@@ -475,10 +499,10 @@ export default function AdminDashboard({ onNavigateTab }) {
 
           <div className="mt-2 flex items-center justify-between font-mono text-xs">
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 bg-[#111418] dark:bg-[#E5E7EB] inline-block" /> Customers: 242
+              <span className="w-2.5 h-2.5 bg-[#111418] dark:bg-[#E5E7EB] inline-block" /> Customers: {summary.total_customers ?? 0}
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 bg-[#FF5B14] inline-block" /> Partners: 86
+              <span className="w-2.5 h-2.5 bg-[#FF5B14] inline-block" /> Partners: {summary.active_partners ?? 0}
             </span>
           </div>
         </div>
@@ -515,8 +539,8 @@ export default function AdminDashboard({ onNavigateTab }) {
           </div>
 
           <div className="mt-2 flex items-center justify-between font-mono text-xs">
-            <span className="text-[var(--theme-text-muted)]">Oct run rate:</span>
-            <span className="font-bold text-signal">₹92,890 / month</span>
+            <span className="text-[var(--theme-text-muted)]">Run rate:</span>
+            <span className="font-bold text-signal">₹{(summary.subscription_revenue || 0).toLocaleString()} / month</span>
           </div>
         </div>
       </div>
@@ -557,7 +581,7 @@ export default function AdminDashboard({ onNavigateTab }) {
                   {peakHours.map((entry, index) => (
                     <Cell
                       key={`hour-cell-${index}`}
-                      fill={entry.requests > 50 ? '#FF5B14' : '#6B7079'}
+                      fill={entry.requests >= maxPeakRequests * 0.7 && entry.requests > 0 ? '#FF5B14' : '#6B7079'}
                     />
                   ))}
                 </Bar>
@@ -565,8 +589,8 @@ export default function AdminDashboard({ onNavigateTab }) {
             </ResponsiveContainer>
           </div>
           <div className="mt-3 pt-3 border-t border-[var(--theme-border)] font-mono text-[11px] text-[var(--theme-text-muted)] flex justify-between">
-            <span>Morning rush: 10:00 - 12:00</span>
-            <span className="text-signal font-bold">Evening surge: 17:00 - 19:00</span>
+            <span>Primary peak: {topHourWindow}</span>
+            <span className="text-signal font-bold">Secondary peak: {secondaryHourWindow}</span>
           </div>
         </div>
 
@@ -613,7 +637,7 @@ export default function AdminDashboard({ onNavigateTab }) {
 
           <div className="mt-4 pt-3 border-t border-[var(--theme-border)] font-mono text-[11px] text-[var(--theme-text-muted)] flex justify-between">
             <span>Ranking based on verified customer ratings</span>
-            <span>Min 50 jobs requirement</span>
+            <span>Total Fixers: {topRatedPartners.length}</span>
           </div>
         </div>
       </div>
