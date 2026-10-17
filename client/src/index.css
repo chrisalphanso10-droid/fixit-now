@@ -313,9 +313,24 @@
 
   input:focus,
   textarea:focus,
-  select:focus {
+  select:focus,
+  button:focus-visible,
+  a:focus-visible,
+  [tabindex]:focus-visible {
     outline: 3px solid #ff5b14;
     outline-offset: 2px;
+  }
+
+  /* Minimum 44px touch target accessibility on mobile and coarse pointer devices */
+  @media (pointer: coarse) {
+    button,
+    input[type='button'],
+    input[type='submit'],
+    input[type='reset'],
+    .touch-target {
+      min-height: 44px;
+      min-width: 44px;
+    }
   }
 
   /* FAQ Native Details / Accordions (DESIGN.md Section 5) */

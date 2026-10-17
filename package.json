@@ -11,6 +11,7 @@
     "build:client": "npm --prefix client run build",
     "db:schema": "node db/migrate.js",
     "db:seed": "node db/seed.js",
+    "db:demo": "node db/demo-seed.js",
     "lint": "eslint client/src server/src",
     "format": "prettier --write \"**/*.{js,jsx,json,css,md}\""
   },

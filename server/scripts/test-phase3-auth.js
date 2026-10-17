@@ -1,6 +1,7 @@
 import { pool } from '../src/config/db.js';
 
-const BASE_URL = 'http://localhost:5000/api';
+const PORT = process.env.PORT || 5001;
+const BASE_URL = `http://localhost:${PORT}/api`;
 
 async function runTests() {
   console.log('--- STARTING PHASE 3 AUTH & RBAC VERIFICATION ---');
@@ -71,7 +72,7 @@ async function runTests() {
       name: `Test Customer ${rand}`,
       email: custEmail,
       password: custPass,
-      phone: `9810${rand}`,
+      phone: `98100${rand}`,
       address: '100 Feet Road, Indiranagar, Bengaluru'
     })
   });
@@ -104,7 +105,7 @@ async function runTests() {
       name: `Partner Tech ${rand}`,
       email: partEmail,
       password: partPass,
-      phone: `9920${rand}`,
+      phone: `99200${rand}`,
       address: 'HAL 2nd Stage, Indiranagar, Bengaluru',
       service_id: servData.data[0].id
     })

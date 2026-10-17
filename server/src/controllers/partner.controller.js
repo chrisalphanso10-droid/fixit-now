@@ -1045,6 +1045,103 @@ export async function getPartnerEarnings(req, res, next) {
   }
 }
 
+/**
+ * 12. Get Partner Profile (SRS FR-P1, FR-P11)
+ */
+export async function getPartnerProfile(req, res, next) {
+  try {
+    const partnerId = req.user.id;
+
+    const result = await query(
+      `SELECT p.id, p.name, p.email, p.phone, p.service_id, s.name AS service_name,
+              p.vehicle, p.address, p.latitude, p.longitude, p.online,
+              p.kyc_status, p.rejection_reason, p.photo_url, p.rating, p.total_jobs, p.badge,
+              p.created_at
+       FROM partners p
+       LEFT JOIN services s ON p.service_id = s.id
+       WHERE p.id = $1`,
+      [partnerId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ status: 'error', message: 'Partner profile not found.' });
+    }
+
+    const row = result.rows[0];
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        ...row,
+        rating: parseFloat(row.rating) || 5.0,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * 13. Update Partner Profile (SRS FR-P1, FR-P11)
+ * Certified trade category is strictly locked per SRS FR-P1.
+ */
+export async function updatePartnerProfile(req, res, next) {
+  try {
+    const partnerId = req.user.id;
+    const { name, phone, address, vehicle } = req.body;
+
+    // Validate inputs
+    const cleanName = name ? String(name).trim() : null;
+    const cleanPhone = phone ? String(phone).trim() : null;
+    const cleanAddress = address ? String(address).trim() : null;
+    const cleanVehicle = vehicle ? String(vehicle).trim() : null;
+
+    if (!cleanName || cleanName.length < 2) {
+      return res.status(400).json({ status: 'error', message: 'Legal name must be at least 2 characters.' });
+    }
+    if (!cleanPhone || cleanPhone.length < 7) {
+      return res.status(400).json({ status: 'error', message: 'A valid registered phone number is required.' });
+    }
+    if (!cleanAddress || cleanAddress.length < 5) {
+      return res.status(400).json({ status: 'error', message: 'Base operating station and address is required.' });
+    }
+    if (!cleanVehicle || cleanVehicle.length < 2) {
+      return res.status(400).json({ status: 'error', message: 'Vehicle or transport mode details are required.' });
+    }
+
+    // Update partner record (trade category service_id is locked per SRS FR-P1)
+    const updateRes = await query(
+      `UPDATE partners
+       SET name = $1, phone = $2, address = $3, vehicle = $4, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $5
+       RETURNING id, name, email, phone, service_id, vehicle, address, latitude, longitude,
+                 online, kyc_status, rejection_reason, photo_url, rating, total_jobs, badge, created_at`,
+      [cleanName, cleanPhone, cleanAddress, cleanVehicle, partnerId]
+    );
+
+    if (updateRes.rows.length === 0) {
+      return res.status(404).json({ status: 'error', message: 'Partner profile not found.' });
+    }
+
+    // Fetch service_name
+    const serviceRes = await query(`SELECT name FROM services WHERE id = $1`, [updateRes.rows[0].service_id]);
+    const serviceName = serviceRes.rows[0]?.name || 'Home Service';
+
+    const profileData = {
+      ...updateRes.rows[0],
+      service_name: serviceName,
+      rating: parseFloat(updateRes.rows[0].rating) || 5.0,
+    };
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Partner profile updated successfully.',
+      data: profileData,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export default {
   getSubscriptionPlans,
   getPartnerSubscription,
@@ -1058,4 +1155,6 @@ export default {
   getAdminKycList,
   getPartnerRatings,
   getPartnerEarnings,
+  getPartnerProfile,
+  updatePartnerProfile,
 };

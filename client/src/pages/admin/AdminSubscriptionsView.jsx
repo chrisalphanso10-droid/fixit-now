@@ -12,13 +12,25 @@ import { getAdminSubscriptions } from '../../services/adminService';
 export default function AdminSubscriptionsView() {
   const [subscriptions, setSubscriptions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
 
+  const fetchSubscriptions = () => {
+    setLoading(true);
+    setError(null);
+    getAdminSubscriptions()
+      .then((data) => {
+        setSubscriptions(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message || 'Failed to load subscription ledger.');
+        setLoading(false);
+      });
+  };
+
   useEffect(() => {
-    getAdminSubscriptions().then((data) => {
-      setSubscriptions(data);
-      setLoading(false);
-    });
+    fetchSubscriptions();
   }, []);
 
   const filtered = subscriptions.filter((s) => {
@@ -68,6 +80,22 @@ export default function AdminSubscriptionsView() {
           </button>
         ))}
       </div>
+
+      {error && (
+        <div className="p-4 border-2 border-dashed border-signal bg-[var(--theme-surface)] space-y-2 font-mono text-xs">
+          <div className="flex items-center gap-2 text-signal font-bold uppercase">
+            <span>[!]</span>
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={fetchSubscriptions}
+            className="px-3 py-1.5 border-2 border-ink bg-ink text-paper font-mono text-xs font-bold uppercase hover:bg-signal hover:text-ink cursor-pointer"
+          >
+            Retry Fetch
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="p-8 text-center font-mono text-xs text-[var(--theme-text-muted)] animate-pulse">

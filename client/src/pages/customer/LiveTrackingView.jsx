@@ -262,6 +262,33 @@ export default function LiveTrackingView({
     ? partner.name.charAt(0)
     : 'P';
 
+  if (!activeRequest && !isCancelled) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className="bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] p-8 sm:p-12 text-center shadow-hard space-y-4">
+          <div className="w-12 h-12 bg-concrete border-2 border-[var(--theme-border)] mx-auto flex items-center justify-center font-bold text-xl text-signal">
+            !
+          </div>
+          <h2 className="font-display font-extrabold text-2xl sm:text-3xl text-[var(--theme-text-main)]">
+            No Active Service Request
+          </h2>
+          <p className="font-mono text-xs sm:text-sm text-[var(--theme-text-soft)] max-w-md mx-auto">
+            You do not currently have any service requests in transit. When you book a trade partner, you can track their real-time arrival here.
+          </p>
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => onNavigate && onNavigate('dashboard')}
+              className="btn-primary min-h-[44px] px-6 text-xs font-mono font-bold uppercase tracking-wider shadow-hard"
+            >
+              Book a Service →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* ============================================================== */}

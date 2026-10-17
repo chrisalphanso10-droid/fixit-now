@@ -217,7 +217,7 @@ export async function getPaymentReceipt(req, res, next) {
     const result = await query(
       `SELECT p.id AS payment_id, p.amount, p.status AS payment_status, p.receipt_no,
               p.payment_method, p.created_at AS payment_date,
-              r.id AS request_id, r.problem, r.description, r.address, r.status AS request_status,
+              r.id AS request_id, r.customer_id, r.partner_id, r.problem, r.description, r.address, r.status AS request_status,
               s.name AS service_name,
               c.name AS customer_name, c.phone AS customer_phone,
               part.name AS partner_name, part.phone AS partner_phone, part.rating AS partner_rating,
@@ -237,6 +237,18 @@ export async function getPaymentReceipt(req, res, next) {
     }
 
     const row = result.rows[0];
+
+    // Authorization & Ownership check (Customer, assigned Partner, or Admin only)
+    const user = req.user;
+    if (user && user.role !== 'admin') {
+      if (user.role === 'customer' && row.customer_id !== user.id) {
+        return res.status(403).json({ status: 'error', message: 'Unauthorized to view this work order receipt.' });
+      }
+      if (user.role === 'partner' && row.partner_id !== user.id) {
+        return res.status(403).json({ status: 'error', message: 'Unauthorized to view this work order receipt.' });
+      }
+    }
+
     const orderNumber = `ORD-${String(row.request_id).replace(/-/g, '').slice(0, 4).toUpperCase()}`;
     const receiptNo = row.receipt_no || `REC-${orderNumber.slice(4)}-01`;
 

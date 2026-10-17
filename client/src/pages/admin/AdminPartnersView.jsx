@@ -13,14 +13,26 @@ import { getAdminPartners } from '../../services/adminService';
 export default function AdminPartnersView() {
   const [partners, setPartners] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
+  const fetchPartners = () => {
+    setLoading(true);
+    setError(null);
+    getAdminPartners()
+      .then((data) => {
+        setPartners(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message || 'Failed to load partners registry.');
+        setLoading(false);
+      });
+  };
+
   useEffect(() => {
-    getAdminPartners().then((data) => {
-      setPartners(data);
-      setLoading(false);
-    });
+    fetchPartners();
   }, []);
 
   const filtered = partners.filter((p) => {
@@ -34,10 +46,10 @@ export default function AdminPartnersView() {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
-      p.name.toLowerCase().includes(term) ||
-      p.email.toLowerCase().includes(term) ||
-      p.service_name.toLowerCase().includes(term) ||
-      p.phone.includes(term)
+      (p.name || '').toLowerCase().includes(term) ||
+      (p.email || '').toLowerCase().includes(term) ||
+      (p.service_name || '').toLowerCase().includes(term) ||
+      (p.phone || '').includes(term)
     );
   });
 
@@ -94,6 +106,22 @@ export default function AdminPartnersView() {
           />
         </div>
       </div>
+
+      {error && (
+        <div className="p-4 border-2 border-dashed border-signal bg-[var(--theme-surface)] space-y-2 font-mono text-xs">
+          <div className="flex items-center gap-2 text-signal font-bold uppercase">
+            <span>[!]</span>
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={fetchPartners}
+            className="px-3 py-1.5 border-2 border-ink bg-ink text-paper font-mono text-xs font-bold uppercase hover:bg-signal hover:text-ink cursor-pointer"
+          >
+            Retry Fetch
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="p-8 text-center font-mono text-xs text-[var(--theme-text-muted)] animate-pulse">

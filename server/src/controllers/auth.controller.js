@@ -77,8 +77,14 @@ export async function registerCustomer(req, res, next) {
       });
     }
 
-    // Geocode customer address with caching and fallbacks
-    const { latitude, longitude } = await geocodeAddress(cleanAddress);
+    // Geocode customer address with caching and fallbacks if coordinates not provided
+    let lat = req.body.latitude != null ? Number(req.body.latitude) : null;
+    let lon = req.body.longitude != null ? Number(req.body.longitude) : null;
+    if (lat == null || lon == null || Number.isNaN(lat) || Number.isNaN(lon) || (lat === 0 && lon === 0)) {
+      const geo = await geocodeAddress(cleanAddress);
+      lat = geo.latitude;
+      lon = geo.longitude;
+    }
 
     // Hash password with bcrypt
     const passwordHash = await hashPassword(password);
@@ -88,7 +94,7 @@ export async function registerCustomer(req, res, next) {
       `INSERT INTO customers (name, email, password_hash, phone, address, latitude, longitude)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, name, email, phone, address, latitude, longitude, created_at`,
-      [cleanName, cleanEmail, passwordHash, cleanPhone, cleanAddress, latitude, longitude]
+      [cleanName, cleanEmail, passwordHash, cleanPhone, cleanAddress, lat, lon]
     );
 
     const customer = insertResult.rows[0];
@@ -98,7 +104,7 @@ export async function registerCustomer(req, res, next) {
       await query(
         `INSERT INTO saved_addresses (customer_id, label, address, latitude, longitude, is_default)
          VALUES ($1, 'Home', $2, $3, $4, true)`,
-        [customer.id, cleanAddress, latitude, longitude]
+        [customer.id, cleanAddress, lat, lon]
       );
     } catch (addrErr) {
       console.warn('[Address Seed Warning]:', addrErr.message);
@@ -394,8 +400,14 @@ export async function registerPartner(req, res, next) {
       });
     }
 
-    // Geocode partner initial base address
-    const { latitude, longitude } = await geocodeAddress(cleanAddress);
+    // Geocode partner initial base address with caching and fallbacks if coordinates not provided
+    let lat = req.body.latitude != null ? Number(req.body.latitude) : null;
+    let lon = req.body.longitude != null ? Number(req.body.longitude) : null;
+    if (lat == null || lon == null || Number.isNaN(lat) || Number.isNaN(lon) || (lat === 0 && lon === 0)) {
+      const geo = await geocodeAddress(cleanAddress);
+      lat = geo.latitude;
+      lon = geo.longitude;
+    }
 
     // Hash password with bcrypt
     const passwordHash = await hashPassword(password);
@@ -415,8 +427,8 @@ export async function registerPartner(req, res, next) {
         cleanAddress,
         resolvedServiceId,
         vehicle?.trim() || 'Two-Wheeler',
-        latitude,
-        longitude,
+        lat,
+        lon,
       ]
     );
 

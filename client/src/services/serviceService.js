@@ -4,7 +4,6 @@
  * Conforms to docs/PLAN.md and docs/SRS.md.
  */
 import { get } from './api.js';
-import { mockServices, mockFaqs } from '../mockData/index.js';
 
 /**
  * Fetch all active services
@@ -17,9 +16,9 @@ export async function getServices() {
       return res.data;
     }
   } catch (err) {
-    console.warn('[Services Fetch Fallback]:', err.message);
+    console.warn('[Services Fetch Error]:', err.message);
   }
-  return mockServices.filter((s) => s.active);
+  return [];
 }
 
 /**
@@ -27,11 +26,15 @@ export async function getServices() {
  * @returns {Promise<Array<{ id: number, question: string, answer: string }>>}
  */
 export async function getLandingFaqs() {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(mockFaqs);
-    }, 50);
-  });
+  try {
+    const res = await get('/api/support/faqs');
+    if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
+      return res.data;
+    }
+  } catch (err) {
+    console.warn('[Landing FAQs Fetch Error]:', err.message);
+  }
+  return [];
 }
 
 export default {

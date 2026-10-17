@@ -285,7 +285,9 @@ export async function handlePartnerAccept(requestId, partnerId) {
 
   const currentPartner = state.eligiblePartners[state.currentIndex];
   if (!currentPartner || String(currentPartner.id) !== String(partnerId)) {
-    throw new Error('This request was offered to another partner or has timed out.');
+    throw new Error(
+      `This request was offered to partner ${currentPartner?.id} (${currentPartner?.name}), but accept called by partner ${partnerId}.`
+    );
   }
 
   if (state.timer) {

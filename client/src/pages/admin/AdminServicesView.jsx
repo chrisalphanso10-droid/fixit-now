@@ -32,13 +32,17 @@ export default function AdminServicesView() {
 
   const [actionLoading, setActionLoading] = useState(false);
   const [modalError, setModalError] = useState(null);
+  const [loadError, setLoadError] = useState(null);
   const [successToast, setSuccessToast] = useState(null);
 
   const loadServices = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await getAdminServices();
-      setServices(data);
+      setServices(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setLoadError(err.message || 'Failed to load service categories.');
     } finally {
       setLoading(false);
     }
@@ -142,6 +146,22 @@ export default function AdminServicesView() {
           <span>✓ {successToast}</span>
           <button type="button" onClick={() => setSuccessToast(null)} className="underline">
             ✕ Close
+          </button>
+        </div>
+      )}
+
+      {loadError && (
+        <div className="p-4 border-2 border-dashed border-signal bg-[var(--theme-surface)] space-y-2 font-mono text-xs">
+          <div className="flex items-center gap-2 text-signal font-bold uppercase">
+            <span>[!]</span>
+            <span>{loadError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={loadServices}
+            className="px-3 py-1.5 border-2 border-ink bg-ink text-paper font-mono text-xs font-bold uppercase hover:bg-signal hover:text-ink cursor-pointer"
+          >
+            Retry Fetch
           </button>
         </div>
       )}

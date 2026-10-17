@@ -178,6 +178,18 @@ export async function getRequestById(req, res, next) {
     }
 
     const row = result.rows[0];
+
+    // Authorization & Ownership check (Security & Privacy)
+    const user = req.user;
+    if (user && user.role !== 'admin') {
+      if (user.role === 'customer' && row.customer_id !== user.id) {
+        return res.status(403).json({ status: 'error', message: 'Unauthorized to view this request.' });
+      }
+      if (user.role === 'partner' && row.partner_id && row.partner_id !== user.id) {
+        return res.status(403).json({ status: 'error', message: 'Unauthorized to view this request.' });
+      }
+    }
+
     const orderNumber = `ORD-${String(row.id).replace(/-/g, '').slice(0, 4).toUpperCase()}`;
 
     // Map status to step index for tracking screen
@@ -333,7 +345,7 @@ export async function cancelRequest(req, res, next) {
     }
 
     const currentReq = check.rows[0];
-    if (req.user.role === 'customer' && currentReq.customer_id !== customerId) {
+    if (req.user.role !== 'admin' && (req.user.role !== 'customer' || currentReq.customer_id !== customerId)) {
       return res.status(403).json({ status: 'error', message: 'You can only cancel your own requests.' });
     }
 
@@ -627,13 +639,18 @@ export async function verifyRequestOtp(req, res, next) {
 export async function rateRequest(req, res, next) {
   try {
     const requestId = req.params.id;
-    const { stars, comment } = req.body;
+    const { stars, rating, comment, review } = req.body;
 
-    const numStars = Math.max(1, Math.min(5, parseInt(stars, 10) || 5));
-    const cleanComment = (comment || 'Service completed successfully.').trim();
+    const rawStars = stars !== undefined ? stars : (rating !== undefined ? rating : 5);
+    const parsedStars = parseInt(rawStars, 10);
+    if (isNaN(parsedStars) || parsedStars < 1 || parsedStars > 5) {
+      return res.status(400).json({ status: 'error', message: 'Rating must be an integer between 1 and 5 stars.' });
+    }
+    const numStars = parsedStars;
+    const cleanComment = (comment || review || 'Service completed successfully.').trim();
 
     const check = await query(
-      `SELECT r.id, r.partner_id, r.status
+      `SELECT r.id, r.customer_id, r.partner_id, r.status
        FROM requests r
        WHERE r.id = $1`,
       [requestId]
@@ -643,9 +660,27 @@ export async function rateRequest(req, res, next) {
       return res.status(404).json({ status: 'error', message: 'Request not found.' });
     }
 
-    const partnerId = check.rows[0].partner_id;
+    const currentReq = check.rows[0];
+
+    // Ownership check: Customer must own this request (or admin)
+    if (req.user && req.user.role !== 'admin' && currentReq.customer_id !== req.user.id) {
+      return res.status(403).json({ status: 'error', message: 'You can only rate your own service requests.' });
+    }
+
+    // Status check: Request must be completed or paid
+    if (currentReq.status !== 'service_completed' && currentReq.status !== 'payment_completed') {
+      return res.status(400).json({ status: 'error', message: 'Cannot rate a request that has not been completed.' });
+    }
+
+    const partnerId = currentReq.partner_id;
     if (!partnerId) {
       return res.status(400).json({ status: 'error', message: 'No partner was assigned to this request.' });
+    }
+
+    // Check if already rated (idempotency & fraud prevention)
+    const existingRating = await query('SELECT id FROM ratings WHERE request_id = $1', [requestId]);
+    if (existingRating.rows.length > 0) {
+      return res.status(400).json({ status: 'error', message: 'This request has already been rated.' });
     }
 
     const ratingRes = await query(

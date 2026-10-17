@@ -13,22 +13,34 @@ import { getAdminCustomers } from '../../services/adminService';
 export default function AdminCustomersView() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
+  const fetchCustomers = () => {
+    setLoading(true);
+    setError(null);
+    getAdminCustomers()
+      .then((data) => {
+        setCustomers(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message || 'Failed to load customer profiles.');
+        setLoading(false);
+      });
+  };
+
   useEffect(() => {
-    getAdminCustomers().then((data) => {
-      setCustomers(data);
-      setLoading(false);
-    });
+    fetchCustomers();
   }, []);
 
   const filtered = customers.filter((c) => {
     const term = searchTerm.toLowerCase();
     return (
-      c.name.toLowerCase().includes(term) ||
-      c.email.toLowerCase().includes(term) ||
-      c.phone.includes(term) ||
-      c.address.toLowerCase().includes(term)
+      (c.name || '').toLowerCase().includes(term) ||
+      (c.email || '').toLowerCase().includes(term) ||
+      (c.phone || '').includes(term) ||
+      (c.address || '').toLowerCase().includes(term)
     );
   });
 
@@ -76,6 +88,22 @@ export default function AdminCustomersView() {
           )}
         </div>
       </div>
+
+      {error && (
+        <div className="p-4 border-2 border-dashed border-signal bg-[var(--theme-surface)] space-y-2 font-mono text-xs">
+          <div className="flex items-center gap-2 text-signal font-bold uppercase">
+            <span>[!]</span>
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={fetchCustomers}
+            className="px-3 py-1.5 border-2 border-ink bg-ink text-paper font-mono text-xs font-bold uppercase hover:bg-signal hover:text-ink cursor-pointer"
+          >
+            Retry Fetch
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="p-8 text-center font-mono text-xs text-[var(--theme-text-muted)] animate-pulse">

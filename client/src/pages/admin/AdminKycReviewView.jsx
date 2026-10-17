@@ -28,11 +28,16 @@ export default function AdminKycReviewView() {
   const [actionLoading, setActionLoading] = useState(false);
   const [successToast, setSuccessToast] = useState(null);
 
+  const [loadError, setLoadError] = useState(null);
+
   const loadData = async (currentFilter = filter) => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await getAdminKycList(currentFilter);
-      setKycList(data);
+      setKycList(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setLoadError(err.message || 'Failed to load KYC dossiers.');
     } finally {
       setLoading(false);
     }
@@ -40,12 +45,21 @@ export default function AdminKycReviewView() {
 
   useEffect(() => {
     let active = true;
-    getAdminKycList(filter).then((data) => {
-      if (active) {
-        setKycList(data);
-        setLoading(false);
-      }
-    });
+    setLoading(true);
+    setLoadError(null);
+    getAdminKycList(filter)
+      .then((data) => {
+        if (active) {
+          setKycList(Array.isArray(data) ? data : []);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (active) {
+          setLoadError(err.message || 'Failed to load KYC dossiers.');
+          setLoading(false);
+        }
+      });
     return () => {
       active = false;
     };
@@ -165,6 +179,22 @@ export default function AdminKycReviewView() {
           );
         })}
       </div>
+
+      {loadError && (
+        <div className="p-4 border-2 border-dashed border-signal bg-[var(--theme-surface)] space-y-2 font-mono text-xs">
+          <div className="flex items-center gap-2 text-signal font-bold uppercase">
+            <span>[!]</span>
+            <span>{loadError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadData()}
+            className="px-3 py-1.5 border-2 border-ink bg-ink text-paper font-mono text-xs font-bold uppercase hover:bg-signal hover:text-ink cursor-pointer"
+          >
+            Retry Fetch
+          </button>
+        </div>
+      )}
 
       {/* Dossiers Grid / List */}
       {loading ? (

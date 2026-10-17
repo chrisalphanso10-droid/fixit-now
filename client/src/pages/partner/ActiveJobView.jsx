@@ -459,7 +459,7 @@ export default function ActiveJobView({
           aria-modal="true"
         >
           <div
-            className="bg-paper border-2 border-ink p-6 sm:p-7 max-w-md w-full shadow-hard relative text-ink font-mono"
+            className="bg-paper border-2 border-ink p-6 sm:p-7 max-w-md w-full shadow-hard relative text-ink font-mono max-h-[90vh] overflow-y-auto"
             style={{ borderRadius: 0 }}
           >
             <div className="flex items-center justify-between border-b-2 border-ink pb-3 mb-4">
@@ -534,7 +534,7 @@ export default function ActiveJobView({
           aria-modal="true"
         >
           <div
-            className="bg-paper border-2 border-ink p-6 sm:p-8 max-w-lg w-full shadow-hard relative text-ink font-mono"
+            className="bg-paper border-2 border-ink p-6 sm:p-8 max-w-lg w-full shadow-hard relative text-ink font-mono max-h-[90vh] overflow-y-auto"
             style={{ borderRadius: 0 }}
           >
             <div className="flex items-center justify-between border-b-2 border-ink pb-3 mb-4">

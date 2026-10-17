@@ -5,7 +5,8 @@
 
 import { query } from '../src/config/db.js';
 
-const API_BASE = 'http://localhost:5000/api';
+const PORT = process.env.PORT || 5001;
+const API_BASE = `http://localhost:${PORT}/api`;
 
 async function runE2ETest() {
   console.log('====================================================');

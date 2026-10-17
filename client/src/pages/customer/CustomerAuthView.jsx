@@ -177,7 +177,7 @@ export default function CustomerAuthView({
   };
 
   return (
-    <div className="max-w-md mx-auto my-6">
+    <div className="max-w-md mx-auto my-6 px-4 sm:px-0">
       <div className="bg-paper border-2 border-ink p-6 sm:p-8 shadow-hard text-ink space-y-6">
         {/* Ticket Header */}
         <div className="flex items-center justify-between border-b-2 border-ink pb-3 font-mono text-xs">

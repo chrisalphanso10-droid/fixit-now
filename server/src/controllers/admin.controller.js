@@ -461,17 +461,43 @@ export async function getAdminRequests(req, res, next) {
     const params = [];
 
     if (status && status !== 'all') {
-      params.push(status);
-      queryText += ` WHERE r.status = $1`;
+      const lower = status.toLowerCase();
+      if (lower === 'pending') {
+        queryText += ` WHERE r.status IN ('requested', 'pending')`;
+      } else if (lower === 'accepted') {
+        queryText += ` WHERE r.status IN ('accepted', 'partner_on_way', 'partner_arrived')`;
+      } else if (lower === 'in_progress') {
+        queryText += ` WHERE r.status IN ('service_started', 'in_progress')`;
+      } else if (lower === 'completed') {
+        queryText += ` WHERE r.status IN ('service_completed', 'payment_completed', 'completed', 'paid')`;
+      } else if (lower === 'cancelled') {
+        queryText += ` WHERE r.status = 'cancelled'`;
+      } else {
+        params.push(status);
+        queryText += ` WHERE r.status = $1`;
+      }
     }
 
-    queryText += ` ORDER BY r.created_at DESC`;
+    queryText += ` ORDER BY r.created_at DESC, r.id DESC`;
 
     const result = await query(queryText, params);
 
+    const mapped = result.rows.map((row) => ({
+      ...row,
+      order_number: `ORD-${String(row.id).replace(/-/g, '').slice(0, 4).toUpperCase()}`,
+      partner: row.partner_id
+        ? {
+            id: row.partner_id,
+            name: row.partner_name,
+            phone: row.partner_phone,
+            email: row.partner_email,
+          }
+        : null,
+    }));
+
     return res.status(200).json({
       status: 'success',
-      data: result.rows,
+      data: mapped,
     });
   } catch (err) {
     next(err);
@@ -537,12 +563,24 @@ export async function getAdminRatings(req, res, next) {
        JOIN requests req ON rat.request_id = req.id
        JOIN customers c ON req.customer_id = c.id
        JOIN services s ON req.service_id = s.id
-       ORDER BY rat.created_at DESC`
+       ORDER BY rat.created_at DESC, rat.id DESC`
     );
+
+    const mapped = result.rows.map((row) => ({
+      ...row,
+      order_number: `ORD-${String(row.request_id).replace(/-/g, '').slice(0, 4).toUpperCase()}`,
+      date: row.created_at
+        ? new Date(row.created_at).toLocaleDateString([], {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          })
+        : '',
+    }));
 
     return res.status(200).json({
       status: 'success',
-      data: result.rows,
+      data: mapped,
     });
   } catch (err) {
     next(err);

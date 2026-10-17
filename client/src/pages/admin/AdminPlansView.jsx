@@ -12,6 +12,7 @@ import { getAdminPlans, updatePlanPrice } from '../../services/adminService';
 export default function AdminPlansView() {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [editingPlanId, setEditingPlanId] = useState(null);
   const [newPrice, setNewPrice] = useState('');
   const [saveLoading, setSaveLoading] = useState(false);
@@ -20,9 +21,12 @@ export default function AdminPlansView() {
 
   const loadPlans = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await getAdminPlans();
-      setPlans(data);
+      setPlans(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setLoadError(err.message || 'Failed to load subscription tiers.');
     } finally {
       setLoading(false);
     }
@@ -111,6 +115,22 @@ export default function AdminPlansView() {
           <span>✓ {successToast}</span>
           <button type="button" onClick={() => setSuccessToast(null)} className="underline">
             ✕ Close
+          </button>
+        </div>
+      )}
+
+      {loadError && (
+        <div className="p-4 border-2 border-dashed border-signal bg-[var(--theme-surface)] space-y-2 font-mono text-xs">
+          <div className="flex items-center gap-2 text-signal font-bold uppercase">
+            <span>[!]</span>
+            <span>{loadError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={loadPlans}
+            className="px-3 py-1.5 border-2 border-ink bg-ink text-paper font-mono text-xs font-bold uppercase hover:bg-signal hover:text-ink cursor-pointer"
+          >
+            Retry Fetch
           </button>
         </div>
       )}

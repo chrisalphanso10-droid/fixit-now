@@ -10,7 +10,8 @@
  * - KYC review: view submitted documents, approve or reject (rejection needs reason), log every decision to activity_logs
  */
 
-const API_BASE = 'http://localhost:5000/api';
+const PORT = process.env.PORT || 5001;
+const API_BASE = `http://localhost:${PORT}/api`;
 
 async function runTests() {
   console.log('====================================================');

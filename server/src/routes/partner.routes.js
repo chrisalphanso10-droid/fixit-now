@@ -16,6 +16,8 @@ import {
   togglePartnerOnline,
   getPartnerRatings,
   getPartnerEarnings,
+  getPartnerProfile,
+  updatePartnerProfile,
 } from '../controllers/partner.controller.js';
 import { authenticateToken, requireRole } from '../middleware/auth.middleware.js';
 import { verifyToken } from '../services/token.service.js';
@@ -119,7 +121,24 @@ router.get(
 );
 
 // =============================================================================
-// 5. Admin / Review KYC Decision (SRS FR-A4, FR-P5)
+// 5. Partner Profile Management (SRS FR-P1, FR-P11)
+// =============================================================================
+router.get(
+  '/profile',
+  authenticateToken,
+  requireRole('partner'),
+  getPartnerProfile
+);
+
+router.put(
+  '/profile',
+  authenticateToken,
+  requireRole('partner'),
+  updatePartnerProfile
+);
+
+// =============================================================================
+// 6. Admin / Review KYC Decision (SRS FR-A4, FR-P5)
 // =============================================================================
 router.put(
   '/kyc/:partnerId/decision',

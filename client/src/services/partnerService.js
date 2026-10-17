@@ -6,12 +6,6 @@
  */
 
 import { get, post, postFormData, put } from './api';
-import {
-  mockPartners,
-  mockPartnerEarnings,
-  mockPartnerRatings,
-  mockIncomingJob,
-} from '../mockData';
 
 const PARTNER_STORAGE_KEY = 'fixit_current_partner';
 const PARTNER_EARNINGS_KEY = 'fixit_partner_earnings_data';
@@ -1313,8 +1307,30 @@ export async function getPartnerHistory(partnerId, filter = 'ALL') {
 /* 8. PROFILE MANAGEMENT (SRS FR-P11)                                         */
 /* ========================================================================== */
 
+export async function getPartnerProfile() {
+  try {
+    const res = await get('/api/partner/profile');
+    if (res && res.data) {
+      setActivePartner(res.data);
+      return res.data;
+    }
+  } catch (err) {
+    console.warn('[PartnerService] getPartnerProfile backend API failed, fallback to local state:', err);
+  }
+  return getActivePartner();
+}
+
 export async function updatePartnerProfile(partnerId, profileData) {
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  try {
+    const res = await put('/api/partner/profile', profileData);
+    if (res && res.data) {
+      setActivePartner(res.data);
+      return res.data;
+    }
+  } catch (err) {
+    console.warn('[PartnerService] updatePartnerProfile backend API failed, fallback to local state:', err);
+  }
+
   const current = getActivePartner();
 
   const updated = {
@@ -1388,6 +1404,7 @@ export default {
   getPartnerHistory,
   savePartnerRecentJob,
   addPartnerRating,
+  getPartnerProfile,
   updatePartnerProfile,
   getEligiblePartnerForTrade,
   getPartnerById,

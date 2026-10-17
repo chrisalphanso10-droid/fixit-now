@@ -21,10 +21,16 @@ export default function AdminRatingsView() {
     });
   }, []);
 
-  const filtered = reviews.filter((r) => {
-    if (starFilter === 'all') return true;
-    return r.stars === Number(starFilter);
-  });
+  const filtered = reviews
+    .filter((r) => {
+      if (starFilter === 'all') return true;
+      return r.stars === Number(starFilter);
+    })
+    .sort(
+      (a, b) =>
+        (new Date(b.created_at || b.date).getTime() || 0) -
+        (new Date(a.created_at || a.date).getTime() || 0)
+    );
 
   return (
     <div className="space-y-6">
@@ -87,7 +93,7 @@ export default function AdminRatingsView() {
                   <th className="p-3.5 border-r border-[var(--theme-border)]">Service Category</th>
                   <th className="p-3.5 border-r border-[var(--theme-border)] text-center">Score</th>
                   <th className="p-3.5 border-r border-[var(--theme-border)]">Customer Feedback Comment</th>
-                  <th className="p-3.5 text-right">Review Date</th>
+                  <th className="p-3.5 text-right">Review Date &amp; Time</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--theme-border)]">
@@ -115,7 +121,12 @@ export default function AdminRatingsView() {
                       &ldquo;{rev.comment}&rdquo;
                     </td>
                     <td className="p-3.5 text-right text-[var(--theme-text-muted)]">
-                      {rev.date}
+                      <div>
+                        {new Date(rev.created_at || rev.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </div>
+                      <div className="text-[10px]">
+                        {new Date(rev.created_at || rev.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -151,7 +162,8 @@ export default function AdminRatingsView() {
                 </div>
 
                 <div className="text-right text-[10px] text-[var(--theme-text-muted)]">
-                  Logged on {rev.date}
+                  Logged on {new Date(rev.created_at || rev.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}{' '}
+                  {new Date(rev.created_at || rev.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
             ))}

@@ -12,15 +12,30 @@ import { getAdminRequests } from '../../services/adminService';
 export default function AdminRequestsView() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
 
-  useEffect(() => {
+  const fetchRequests = () => {
     setLoading(true);
-    getAdminRequests(filter).then((data) => {
-      setRequests(data);
-      setLoading(false);
-    });
+    setError(null);
+    getAdminRequests(filter)
+      .then((data) => {
+        setRequests(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message || 'Failed to load service requests stream.');
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    fetchRequests();
   }, [filter]);
+
+  const sortedRequests = [...requests].sort(
+    (a, b) => (new Date(b.created_at).getTime() || 0) - (new Date(a.created_at).getTime() || 0)
+  );
 
   return (
     <div className="space-y-6">
@@ -64,6 +79,22 @@ export default function AdminRequestsView() {
         ))}
       </div>
 
+      {error && (
+        <div className="p-4 border-2 border-dashed border-signal bg-[var(--theme-surface)] space-y-2 font-mono text-xs">
+          <div className="flex items-center gap-2 text-signal font-bold uppercase">
+            <span>[!]</span>
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={fetchRequests}
+            className="px-3 py-1.5 border-2 border-ink bg-ink text-paper font-mono text-xs font-bold uppercase hover:bg-signal hover:text-ink cursor-pointer"
+          >
+            Retry Fetch
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="p-8 text-center font-mono text-xs text-[var(--theme-text-muted)] animate-pulse">
           [SCANNING CITY-WIDE WORK ORDERS &amp; OTP LOGS...]
@@ -87,11 +118,11 @@ export default function AdminRequestsView() {
                   <th className="p-3.5 border-r border-[var(--theme-border)]">Assigned Partner</th>
                   <th className="p-3.5 border-r border-[var(--theme-border)] text-center">Status</th>
                   <th className="p-3.5 border-r border-[var(--theme-border)] text-center">Service OTP</th>
-                  <th className="p-3.5 text-right">Created Time</th>
+                  <th className="p-3.5 text-right">Created Date &amp; Time</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--theme-border)]">
-                {requests.map((req, idx) => (
+                {sortedRequests.map((req, idx) => (
                   <tr
                     key={req.id}
                     className={`transition-colors hover:bg-signal/5 ${
@@ -147,7 +178,10 @@ export default function AdminRequestsView() {
                       )}
                     </td>
                     <td className="p-3.5 text-right text-[var(--theme-text-muted)]">
-                      {new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      <div>{new Date(req.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                      <div className="text-[10px] text-[var(--theme-text-muted)]">
+                        {new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -159,7 +193,7 @@ export default function AdminRequestsView() {
           {/* MOBILE VIEW (< 768px): STACKED TICKET CARDS                    */}
           {/* ============================================================== */}
           <div className="md:hidden space-y-4">
-            {requests.map((req) => (
+            {sortedRequests.map((req) => (
               <div
                 key={req.id}
                 className="bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] p-4 shadow-hard text-xs font-mono space-y-2"
@@ -204,8 +238,9 @@ export default function AdminRequestsView() {
                   <span className="text-[var(--theme-text-muted)]">
                     Service OTP: <strong className="text-signal">{req.service_otp}</strong>
                   </span>
-                  <span className="text-[var(--theme-text-muted)]">
-                    {new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  <span className="text-[var(--theme-text-muted)] text-right">
+                    <span>{new Date(req.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</span>{' '}
+                    <span>{new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   </span>
                 </div>
               </div>
