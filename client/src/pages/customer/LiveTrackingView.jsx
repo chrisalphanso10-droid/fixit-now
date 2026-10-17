@@ -21,7 +21,22 @@ export default function LiveTrackingView({
   // 4: Service started (OTP verified)
   // 5: Service completed
   // 6: Payment completed
+  // Step index: 1 to 6
+  // 1: Request accepted
+  // 2: Partner on the way
+  // 3: Partner arrived
+  // 4: Service started (OTP verified)
+  // 5: Service completed
+  // 6: Payment completed
   const [currentStep, setCurrentStep] = useState(activeRequest?.step_index || 1);
+  const [partnerProgress, setPartnerProgress] = useState(
+    (activeRequest?.step_index || 1) <= 1 ? 0 : (activeRequest?.step_index || 1) === 2 ? 0.05 : 1.0
+  );
+  const [etaMinutes, setEtaMinutes] = useState(
+    (activeRequest?.step_index || 1) <= 1 ? 14 : (activeRequest?.step_index || 1) === 2 ? 10 : 0
+  );
+  const [isCancelled, setIsCancelled] = useState(activeRequest?.status === 'cancelled');
+  const [cancelledReasonText, setCancelledReasonText] = useState(activeRequest?.cancel_reason || '');
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('Found another solution');
   const [showOtpModal, setShowOtpModal] = useState(
@@ -42,6 +57,10 @@ export default function LiveTrackingView({
   useEffect(() => {
     if (activeRequest?.step_index) {
       setCurrentStep(activeRequest.step_index);
+      if (activeRequest.step_index >= 3) {
+        setPartnerProgress(1.0);
+        setEtaMinutes(0);
+      }
       if (
         activeRequest.step_index === 3 ||
         activeRequest.status === 'partner_arrived' ||
@@ -57,9 +76,13 @@ export default function LiveTrackingView({
         setPaymentConfirmed(true);
       }
     }
-  }, [activeRequest?.step_index, activeRequest?.status]);
+    if (activeRequest?.status === 'cancelled') {
+      setIsCancelled(true);
+      setCancelledReasonText(activeRequest.cancel_reason || 'Cancelled by customer');
+    }
+  }, [activeRequest?.step_index, activeRequest?.status, activeRequest?.cancel_reason]);
 
-  // Real-time Socket.IO listener: updates tracking status ONLY after partner updates position/status!
+  // Real-time Socket.IO listener: updates tracking status & movement
   useEffect(() => {
     if (!activeRequest?.id) return;
 
@@ -86,12 +109,18 @@ export default function LiveTrackingView({
       ) {
         if (data.step_index != null) {
           setCurrentStep(data.step_index);
-          // If partner arrived (step 3), automatically pop up OTP on customer screen!
+          // If step 2 (partner on the way), initial progress
+          if (data.step_index === 2) {
+            setEtaMinutes(14);
+          }
+          // If partner arrived (step 3), partner reached destination
           if (
             data.step_index === 3 ||
             data.status === 'arrived' ||
             data.status === 'partner_arrived'
           ) {
+            setPartnerProgress(1.0);
+            setEtaMinutes(0);
             setShowOtpModal(true);
           }
           // If service started (step 4+), automatically close OTP modal as it is verified!
@@ -100,6 +129,8 @@ export default function LiveTrackingView({
             data.status === 'service_started' ||
             data.status === 'in_progress'
           ) {
+            setPartnerProgress(1.0);
+            setEtaMinutes(0);
             setShowOtpModal(false);
           }
           // If payment completed (step 6), confirm payment on customer screen!
@@ -115,20 +146,39 @@ export default function LiveTrackingView({
       }
     };
 
+    // Live movement position updates from server (SRS FR-T2, FR-C15)
+    const handleLocationUpdate = (data) => {
+      if (
+        data &&
+        (String(data.requestId) === String(activeRequest.id) ||
+          String(data.id) === String(activeRequest.id))
+      ) {
+        if (typeof data.progress === 'number') {
+          setPartnerProgress(Math.min(1.0, Math.max(0, data.progress)));
+        }
+        if (typeof data.eta_minutes === 'number') {
+          setEtaMinutes(data.eta_minutes);
+        }
+      }
+    };
+
+    // Immediate cancellation notification
     const handleCancel = (data) => {
       if (
         data &&
         (String(data.requestId) === String(activeRequest.id) ||
           String(data.id) === String(activeRequest.id))
       ) {
-        if (onCancel) onCancel();
-        onNavigate('history');
+        setIsCancelled(true);
+        setCancelledReasonText(data.reason || 'Cancelled by customer');
       }
     };
 
     try {
       if (typeof socketService.on === 'function') {
         socketService.on('request_status_updated', handleStatusUpdate);
+        socketService.on('partner_location', handleLocationUpdate);
+        socketService.on('partner_location_update', handleLocationUpdate);
         socketService.on('otp_prompt_customer', handleOtpPrompt);
         socketService.on('request_cancelled', handleCancel);
       }
@@ -140,6 +190,8 @@ export default function LiveTrackingView({
       try {
         if (typeof socketService.off === 'function') {
           socketService.off('request_status_updated', handleStatusUpdate);
+          socketService.off('partner_location', handleLocationUpdate);
+          socketService.off('partner_location_update', handleLocationUpdate);
           socketService.off('otp_prompt_customer', handleOtpPrompt);
           socketService.off('request_cancelled', handleCancel);
         }
@@ -147,11 +199,7 @@ export default function LiveTrackingView({
         // ignore cleanup warning
       }
     };
-  }, [activeRequest?.id, activeRequest?.customer_id, onCancel, onNavigate]);
-
-  // Derived progress and ETA from currentStep (Step 1: 0%, Step 2: 50%, Step 3+: 100%)
-  const partnerProgress = currentStep <= 1 ? 0 : currentStep === 2 ? 0.5 : 1.0;
-  const etaMinutes = currentStep <= 1 ? 14 : currentStep === 2 ? 7 : 0;
+  }, [activeRequest?.id, activeRequest?.customer_id]);
 
   // Steps definition matching SRS FR-C14
   const steps = [
@@ -193,12 +241,12 @@ export default function LiveTrackingView({
   const partnerPos = getPartnerCoords(partnerProgress);
 
   const handleCancelSubmit = async () => {
+    setShowCancelModal(false);
+    setIsCancelled(true);
+    setCancelledReasonText(cancelReason);
     if (activeRequest && activeRequest.id) {
       await cancelServiceRequest(activeRequest.id, cancelReason);
     }
-    setShowCancelModal(false);
-    if (onCancel) onCancel();
-    onNavigate('history');
   };
 
   const rawPartner = activeRequest?.partner || {};
@@ -216,6 +264,62 @@ export default function LiveTrackingView({
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      {/* ============================================================== */}
+      {/* CANCELLATION NOTICE & GO TO DASHBOARD BUTTON (SRS FR-C19)       */}
+      {/* ============================================================== */}
+      {isCancelled && (
+        <div className="bg-paper border-2 border-ink p-6 sm:p-8 shadow-hard text-ink space-y-4">
+          <div className="flex items-center justify-between border-b-2 border-ink pb-3">
+            <span className="stamp-badge bg-signal text-ink border-ink font-bold text-xs">
+              ! WORK ORDER CANCELLED
+            </span>
+            <span className="font-mono text-xs text-soft font-bold uppercase">
+              STATUS: CANCELLED
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-2xl sm:text-3xl font-display font-extrabold text-ink">
+              Request Cancelled
+            </h2>
+            <p className="text-sm sm:text-base text-soft font-sans">
+              Your service request ({activeRequest?.order_number || 'Work Order'}) has been cancelled.
+              {cancelledReasonText ? ` Reason: "${cancelledReasonText}". ` : ' '}
+              The partner has been notified instantly and released for new dispatches.
+            </p>
+          </div>
+
+          <div className="p-3.5 bg-concrete border-2 border-ink font-mono text-xs space-y-1">
+            <div>• ORDER NUMBER: <span className="font-bold text-ink">{activeRequest?.order_number || 'ORD-0428'}</span></div>
+            <div>• SERVICE: <span className="font-bold text-ink">{activeRequest?.service_name || 'Home Service'}</span></div>
+            <div>• RECORD: Archived in your permanent customer history.</div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (onCancel) onCancel();
+                onNavigate('dashboard');
+              }}
+              className="btn-primary min-h-[48px] px-8 text-sm font-mono font-bold uppercase tracking-wider shadow-hard"
+            >
+              Go to dashboard →
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (onCancel) onCancel();
+                onNavigate('history');
+              }}
+              className="btn-secondary min-h-[48px] px-6 text-xs font-mono font-bold uppercase tracking-wider"
+            >
+              View in history
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ============================================================== */}
       {/* 1. CUSTOM SVG MAP (DESIGN.md Section 6 & 10)                   */}
       {/* ============================================================== */}
@@ -578,13 +682,19 @@ export default function LiveTrackingView({
                   {/* 22px circle tick mark with stamp-in animation */}
                   <div className="shrink-0 mt-0.5">
                     {isCompleted ? (
-                      <span className="w-[22px] h-[22px] rounded-full bg-done flex items-center justify-center animate-stamp-in shadow-sm">
+                      <span
+                        key={`tick-${st.id}-${isCompleted}`}
+                        className="w-[22px] h-[22px] rounded-full bg-done flex items-center justify-center animate-stamp-in shadow-sm"
+                      >
                         <svg viewBox="0 0 16 16" className="w-3 h-3 fill-paper" aria-hidden="true">
                           <polygon points="14,3 6,11 2,7 0,9 6,15 16,5" />
                         </svg>
                       </span>
                     ) : (
-                      <span className="w-[22px] h-[22px] rounded-full border-2 border-muted flex items-center justify-center bg-transparent" />
+                      <span
+                        key={`untick-${st.id}`}
+                        className="w-[22px] h-[22px] rounded-full border-2 border-muted flex items-center justify-center bg-transparent"
+                      />
                     )}
                   </div>
 

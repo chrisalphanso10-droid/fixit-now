@@ -5,12 +5,12 @@
  * Conforms to docs/DESIGN.md line 90 and SRS FR-P9, FR-P10, FR-P12.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   advanceJobStep,
   simulateCustomerCancel,
 } from '../../services/partnerService';
-import { requestOtpPrompt } from '../../services/socketService';
+import socketService, { requestOtpPrompt } from '../../services/socketService';
 
 export default function ActiveJobView({
   activeJob,
@@ -24,6 +24,51 @@ export default function ActiveJobView({
   const [otpInput, setOtpInput] = useState('');
   const [settlementReceipt, setSettlementReceipt] = useState(null);
   const [cancellationAlert, setCancellationAlert] = useState(null);
+
+  // Real-time cancellation and status synchronization via Socket.IO
+  useEffect(() => {
+    if (!activeJob?.id) return;
+
+    socketService.joinRequest(activeJob.id);
+
+    const unsubCancelled = socketService.onRequestCancelled((data) => {
+      if (
+        !data ||
+        !data.requestId ||
+        String(data.requestId) === String(activeJob.id) ||
+        String(data.id) === String(activeJob.id)
+      ) {
+        setCancellationAlert({
+          reason: data?.reason || 'Customer cancelled the work order.',
+          message: data?.message || 'You are freed for new jobs.',
+        });
+        setTimeout(() => {
+          if (onJobClosed) onJobClosed(null);
+        }, 2500);
+      }
+    });
+
+    const handleStatusSync = (data) => {
+      if (
+        data &&
+        (String(data.requestId) === String(activeJob.id) ||
+          String(data.id) === String(activeJob.id))
+      ) {
+        if (onJobUpdated) onJobUpdated(data);
+      }
+    };
+
+    if (typeof socketService.on === 'function') {
+      socketService.on('request_status_updated', handleStatusSync);
+    }
+
+    return () => {
+      if (typeof unsubCancelled === 'function') unsubCancelled();
+      if (typeof socketService.off === 'function') {
+        socketService.off('request_status_updated', handleStatusSync);
+      }
+    };
+  }, [activeJob?.id, onJobClosed, onJobUpdated]);
 
   if (!activeJob) {
     return (
@@ -51,7 +96,19 @@ export default function ActiveJobView({
     );
   }
 
-  const currentStatus = activeJob.status || 'accepted'; // 'accepted' | 'on_the_way' | 'arrived' | 'in_progress' | 'completed'
+  const rawStatus = activeJob.status || 'accepted';
+  const currentStatus =
+    rawStatus === 'partner_on_way'
+      ? 'on_the_way'
+      : rawStatus === 'partner_arrived'
+      ? 'arrived'
+      : rawStatus === 'service_started'
+      ? 'in_progress'
+      : rawStatus === 'service_completed'
+      ? 'completed'
+      : rawStatus === 'payment_completed'
+      ? 'paid'
+      : rawStatus;
 
   // Progression steps ladder
   const statusLadder = [
@@ -284,11 +341,11 @@ export default function ActiveJobView({
             <div className="flex justify-between items-center">
               <span className="font-bold">SERVICE OTP:</span>
               <span className="font-bold text-signal px-2 py-0.5 bg-paper border border-ink">
-                {currentStatus === 'arrived' ? 'REQUEST FROM CUSTOMER (HINT: 8392)' : 'PROTECTED UNTIL ARRIVAL'}
+                {currentStatus === 'arrived' ? (activeJob.service_otp ? `CUSTOMER OTP: ${activeJob.service_otp}` : 'REQUEST FROM CUSTOMER') : 'PROTECTED UNTIL ARRIVAL'}
               </span>
             </div>
             <div className="text-[11px] text-muted leading-relaxed">
-              Customer gives you the 4-digit OTP upon arrival to verify physical presence before opening tools.
+              Customer gives you the 6-digit OTP upon arrival to verify physical presence before opening tools.
             </div>
           </div>
 
@@ -321,7 +378,7 @@ export default function ActiveJobView({
             <div className="font-display font-extrabold text-xl text-[var(--theme-text-main)]">
               {currentStatus === 'accepted' && 'Step 1: Commencing Journey to Customer Site'}
               {currentStatus === 'on_the_way' && 'Step 2: Reached Customer Doorstep'}
-              {currentStatus === 'arrived' && 'Step 3: Verify 4-Digit Service OTP to Start Work'}
+              {currentStatus === 'arrived' && 'Step 3: Verify 6-Digit Service OTP to Start Work'}
               {currentStatus === 'in_progress' && 'Step 4: Repair Work in Progress'}
               {currentStatus === 'completed' && 'Step 5: Direct On-Site Settlement & Payout'}
             </div>
@@ -334,9 +391,9 @@ export default function ActiveJobView({
                 type="button"
                 disabled={loading}
                 onClick={handleNextAction}
-                className="btn-primary w-full sm:w-auto min-h-[48px] px-8 text-sm uppercase tracking-wider font-bold shadow-hard"
+                className="btn-primary w-full sm:w-auto min-h-[52px] px-10 text-base uppercase tracking-wider font-bold shadow-hard"
               >
-                {loading ? 'STARTING...' : 'START TRIP →'}
+                {loading ? 'STARTING...' : 'Start trip'}
               </button>
             )}
 
@@ -345,9 +402,9 @@ export default function ActiveJobView({
                 type="button"
                 disabled={loading}
                 onClick={handleNextAction}
-                className="btn-primary w-full sm:w-auto min-h-[48px] px-8 text-sm uppercase tracking-wider font-bold shadow-hard"
+                className="btn-primary w-full sm:w-auto min-h-[52px] px-10 text-base uppercase tracking-wider font-bold shadow-hard"
               >
-                {loading ? 'RECORDING ARRIVAL...' : 'ARRIVED AT CUSTOMER LOCATION →'}
+                {loading ? 'RECORDING ARRIVAL...' : 'Arrived'}
               </button>
             )}
 
@@ -361,9 +418,9 @@ export default function ActiveJobView({
                   }
                   setOtpModalOpen(true);
                 }}
-                className="btn-primary w-full sm:w-auto min-h-[48px] px-8 text-sm uppercase tracking-wider font-bold shadow-hard"
+                className="btn-primary w-full sm:w-auto min-h-[52px] px-10 text-base uppercase tracking-wider font-bold shadow-hard"
               >
-                ENTER SERVICE OTP &amp; START SERVICE →
+                Start service
               </button>
             )}
 
@@ -372,9 +429,9 @@ export default function ActiveJobView({
                 type="button"
                 disabled={loading}
                 onClick={handleNextAction}
-                className="btn-primary w-full sm:w-auto min-h-[48px] px-8 text-sm uppercase tracking-wider font-bold shadow-hard"
+                className="btn-primary w-full sm:w-auto min-h-[52px] px-10 text-base uppercase tracking-wider font-bold shadow-hard"
               >
-                {loading ? 'RECORDING COMPLETION...' : 'COMPLETE SERVICE WORK →'}
+                {loading ? 'RECORDING COMPLETION...' : 'Complete service'}
               </button>
             )}
 
@@ -383,9 +440,9 @@ export default function ActiveJobView({
                 type="button"
                 disabled={loading}
                 onClick={handleNextAction}
-                className="w-full sm:w-auto min-h-[48px] px-8 border-2 border-ink bg-done text-paper font-mono text-sm uppercase tracking-wider font-bold shadow-hard hover:opacity-95"
+                className="w-full sm:w-auto min-h-[52px] px-10 border-2 border-ink bg-done text-paper font-mono text-base uppercase tracking-wider font-bold shadow-hard hover:opacity-95"
               >
-                {loading ? 'CONFIRMING SETTLEMENT...' : 'PAYMENT RECEIVED & CLOSE JOB →'}
+                {loading ? 'CONFIRMING SETTLEMENT...' : 'Payment received'}
               </button>
             )}
           </div>

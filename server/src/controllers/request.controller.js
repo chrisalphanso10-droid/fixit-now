@@ -11,6 +11,8 @@ import {
   handlePartnerAccept,
   handlePartnerDecline,
   handleCustomerCancel,
+  startMovementSimulation,
+  stopMovementSimulation,
   notifyRequestStatusUpdate,
 } from '../services/socket.service.js';
 
@@ -204,6 +206,15 @@ export async function getRequestById(req, res, next) {
         }
       : null;
 
+    // Query all status transition logs with timestamps
+    const logsRes = await query(
+      `SELECT id, status, created_at
+       FROM request_status_logs
+       WHERE request_id = $1
+       ORDER BY created_at ASC`,
+      [requestId]
+    );
+
     return res.status(200).json({
       status: 'success',
       data: {
@@ -211,6 +222,7 @@ export async function getRequestById(req, res, next) {
         order_number: orderNumber,
         step_index: stepMap[row.status] ?? 0,
         partner: partnerData,
+        status_logs: logsRes.rows,
       },
     });
   } catch (err) {
@@ -414,7 +426,22 @@ export async function updateRequestStatus(req, res, next) {
     const partnerId = req.user.id;
     const { status } = req.body;
 
-    const allowedTransitions = ['on_the_way', 'arrived', 'completed', 'paid'];
+    const allowedTransitions = [
+      'accepted',
+      'start_trip',
+      'on_the_way',
+      'partner_on_way',
+      'arrived',
+      'partner_arrived',
+      'start_service',
+      'service_started',
+      'in_progress',
+      'completed',
+      'service_completed',
+      'payment_received',
+      'paid',
+      'payment_completed',
+    ];
     if (!allowedTransitions.includes(status)) {
       return res.status(400).json({
         status: 'error',
@@ -424,11 +451,14 @@ export async function updateRequestStatus(req, res, next) {
 
     const check = await query(
       `SELECT r.id, r.status, r.customer_id, r.partner_id, r.service_otp,
+              r.latitude AS customer_lat, r.longitude AS customer_lon,
               c.name AS customer_name, c.phone AS customer_phone,
-              s.name AS service_name
+              s.name AS service_name,
+              p.latitude AS partner_lat, p.longitude AS partner_lon
        FROM requests r
        JOIN customers c ON r.customer_id = c.id
        JOIN services s ON r.service_id = s.id
+       LEFT JOIN partners p ON r.partner_id = p.id
        WHERE r.id = $1`,
       [requestId]
     );
@@ -445,14 +475,17 @@ export async function updateRequestStatus(req, res, next) {
     // Step index and DB status mapping (matches docs/SRS.md and db/schema.sql constraints)
     const statusMap = {
       accepted: { dbStatus: 'accepted', stepIndex: 1 },
+      start_trip: { dbStatus: 'partner_on_way', stepIndex: 2 },
       on_the_way: { dbStatus: 'partner_on_way', stepIndex: 2 },
       partner_on_way: { dbStatus: 'partner_on_way', stepIndex: 2 },
       arrived: { dbStatus: 'partner_arrived', stepIndex: 3 },
       partner_arrived: { dbStatus: 'partner_arrived', stepIndex: 3 },
+      start_service: { dbStatus: 'service_started', stepIndex: 4 },
       in_progress: { dbStatus: 'service_started', stepIndex: 4 },
       service_started: { dbStatus: 'service_started', stepIndex: 4 },
       completed: { dbStatus: 'service_completed', stepIndex: 5 },
       service_completed: { dbStatus: 'service_completed', stepIndex: 5 },
+      payment_received: { dbStatus: 'payment_completed', stepIndex: 6 },
       paid: { dbStatus: 'payment_completed', stepIndex: 6 },
       payment_completed: { dbStatus: 'payment_completed', stepIndex: 6 },
       cancelled: { dbStatus: 'cancelled', stepIndex: -1 },
@@ -474,11 +507,35 @@ export async function updateRequestStatus(req, res, next) {
       [requestId, dbStatus]
     );
 
-    // If paid/completed, increment partner total_jobs
+    // Movement Simulation: Start when partner begins trip (SRS FR-T2, FR-C15)
+    if (dbStatus === 'partner_on_way') {
+      const cLat = Number(currentReq.customer_lat) || 12.9784;
+      const cLon = Number(currentReq.customer_lon) || 77.6408;
+      const pLat = Number(currentReq.partner_lat) || (cLat - 0.007);
+      const pLon = Number(currentReq.partner_lon) || (cLon - 0.005);
+
+      startMovementSimulation({
+        requestId,
+        partnerId,
+        customerId: currentReq.customer_id,
+        startLat: pLat,
+        startLon: pLon,
+        endLat: cLat,
+        endLon: cLon,
+        initialEta: 14,
+        totalSteps: 14,
+      });
+    } else if (dbStatus === 'partner_arrived') {
+      stopMovementSimulation(requestId);
+    } else if (dbStatus === 'service_completed' || dbStatus === 'payment_completed') {
+      stopMovementSimulation(requestId);
+    }
+
+    // If paid/completed, increment partner total_jobs and free partner (SRS FR-P12, BR-7)
     if (dbStatus === 'payment_completed' || dbStatus === 'service_completed') {
       try {
         await query(
-          `UPDATE partners SET total_jobs = total_jobs + 1 WHERE id = $1`,
+          `UPDATE partners SET total_jobs = total_jobs + 1, online = true WHERE id = $1`,
           [partnerId]
         );
       } catch (err) {
@@ -487,7 +544,7 @@ export async function updateRequestStatus(req, res, next) {
     }
 
     // Notify customer and partner rooms via Socket.IO
-    notifyRequestStatusUpdate(requestId, status, stepIndex, {
+    notifyRequestStatusUpdate(requestId, dbStatus, stepIndex, {
       customerId: currentReq.customer_id,
       partnerId,
       service_name: currentReq.service_name,
@@ -496,10 +553,10 @@ export async function updateRequestStatus(req, res, next) {
 
     return res.status(200).json({
       status: 'success',
-      message: `Request status updated to ${status}.`,
+      message: `Request status updated to ${dbStatus}.`,
       data: {
         id: requestId,
-        status,
+        status: dbStatus,
         step_index: stepIndex,
       },
     });

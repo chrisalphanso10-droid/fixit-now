@@ -186,6 +186,20 @@ export function onOtpPrompt(callback) {
 }
 
 /**
+ * Subscribes to partner location & ETA movements (Customer and Partner side)
+ */
+export function onPartnerLocation(callback) {
+  const s = getSocket();
+  const handler = (data) => callback(data);
+  s.on('partner_location', handler);
+  s.on('partner_location_update', handler);
+  return () => {
+    s.off('partner_location', handler);
+    s.off('partner_location_update', handler);
+  };
+}
+
+/**
  * Generic event listener on socket
  */
 export function on(event, callback) {
@@ -222,7 +236,9 @@ export default {
   onRequestAccepted,
   onSearchingUpdate,
   onAllPartnersBusy,
+  onPartnerLocation,
   on,
   off,
 };
+
 

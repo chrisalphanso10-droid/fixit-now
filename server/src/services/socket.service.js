@@ -39,7 +39,8 @@ export function initSocketServer(httpServer) {
 
   io.on('connection', (socket) => {
     // 1. Partner registration
-    socket.on('register_partner', ({ partnerId }) => {
+    socket.on('register_partner', (payload) => {
+      const partnerId = typeof payload === 'object' && payload !== null ? payload.partnerId : payload;
       if (!partnerId) return;
       const room = `partner:${partnerId}`;
       socket.join(room);
@@ -48,7 +49,8 @@ export function initSocketServer(httpServer) {
     });
 
     // 2. Customer registration
-    socket.on('register_customer', ({ customerId }) => {
+    socket.on('register_customer', (payload) => {
+      const customerId = typeof payload === 'object' && payload !== null ? payload.customerId : payload;
       if (!customerId) return;
       const room = `customer:${customerId}`;
       socket.join(room);
@@ -57,7 +59,8 @@ export function initSocketServer(httpServer) {
     });
 
     // 3. Join request-specific channel
-    socket.on('join_request', ({ requestId }) => {
+    socket.on('join_request', (payload) => {
+      const requestId = typeof payload === 'object' && payload !== null ? payload.requestId : payload;
       if (!requestId) return;
       socket.join(`request:${requestId}`);
       socket.emit('joined_request', { requestId });
@@ -396,13 +399,19 @@ export async function handlePartnerDecline(requestId, partnerId, reason = 'PARTN
 }
 
 /**
- * Customer cancels the request while searching or in matching
+ * Customer cancels the request while searching, matching, or in active trip
+ * Conforms to docs/SRS.md FR-C19, FR-T3.
  *
  * @param {string} requestId
  * @param {string} [reason]
  */
 export async function handleCustomerCancel(requestId, reason = 'Cancelled by customer') {
+  // 1. Stop any active location movement simulation
+  stopMovementSimulation(requestId);
+
   const state = activeDispatches.get(String(requestId));
+  let targetPartnerId = null;
+  let targetCustomerId = null;
 
   if (state) {
     if (state.timer) {
@@ -411,20 +420,31 @@ export async function handleCustomerCancel(requestId, reason = 'Cancelled by cus
     }
     state.status = 'cancelled';
 
-    // If currently offered to a partner, notify them so popup closes instantly (SRS FR-C19, FR-T3)
     const currentPartner = state.eligiblePartners[state.currentIndex];
-    if (currentPartner && io) {
-      io.to(`partner:${currentPartner.id}`).emit('request_cancelled', {
-        requestId,
-        reason,
-        message: 'Customer cancelled the request. You are now free for new dispatches.',
-      });
+    if (currentPartner) {
+      targetPartnerId = currentPartner.id;
     }
-
+    targetCustomerId = state.request?.customer_id;
     activeDispatches.delete(String(requestId));
   }
 
-  // Update DB
+  // 2. Fetch DB request record to resolve assigned partner and customer if already accepted
+  try {
+    const checkRes = await db.query(
+      'SELECT customer_id, partner_id FROM requests WHERE id = $1',
+      [requestId]
+    );
+    if (checkRes.rows.length > 0) {
+      targetCustomerId = checkRes.rows[0].customer_id || targetCustomerId;
+      if (checkRes.rows[0].partner_id) {
+        targetPartnerId = checkRes.rows[0].partner_id;
+      }
+    }
+  } catch (err) {
+    console.warn('[SocketService DB Query on Cancel Warning]:', err.message);
+  }
+
+  // 3. Update DB
   await db.query(
     `UPDATE requests
      SET status = 'cancelled', cancel_reason = $1, updated_at = CURRENT_TIMESTAMP
@@ -437,12 +457,31 @@ export async function handleCustomerCancel(requestId, reason = 'Cancelled by cus
     [requestId]
   );
 
+  // 4. Free the partner for new dispatches (SRS FR-C19)
+  if (targetPartnerId) {
+    try {
+      await db.query(`UPDATE partners SET online = true WHERE id = $1`, [targetPartnerId]);
+    } catch (err) {
+      console.warn('[SocketService Partner Free Warning]:', err.message);
+    }
+  }
+
+  // 5. Broadcast cancellation to all relevant Socket.IO rooms
   if (io) {
-    io.to(`request:${requestId}`).emit('request_cancelled', {
+    const cancelPayload = {
       requestId,
       reason,
       status: 'cancelled',
-    });
+      message: 'Customer cancelled the request. You are now free for new dispatches.',
+    };
+
+    io.to(`request:${requestId}`).emit('request_cancelled', cancelPayload);
+    if (targetCustomerId) {
+      io.to(`customer:${targetCustomerId}`).emit('request_cancelled', cancelPayload);
+    }
+    if (targetPartnerId) {
+      io.to(`partner:${targetPartnerId}`).emit('request_cancelled', cancelPayload);
+    }
   }
 
   return { success: true };
@@ -490,10 +529,101 @@ async function handleMatchingExhausted(requestId) {
 }
 
 /**
+ * Active movement simulation intervals: requestId -> Interval
+ */
+const activeMovementSimulations = new Map();
+
+/**
+ * Start simulated partner movement toward customer coordinates every second (SRS FR-T2, Section 6)
+ *
+ * @param {object} params
+ * @param {string} params.requestId
+ * @param {string} [params.partnerId]
+ * @param {string} [params.customerId]
+ * @param {number} [params.startLat]
+ * @param {number} [params.startLon]
+ * @param {number} [params.endLat]
+ * @param {number} [params.endLon]
+ * @param {number} [params.initialEta]
+ * @param {number} [params.totalSteps]
+ */
+export function startMovementSimulation({
+  requestId,
+  partnerId,
+  customerId,
+  startLat,
+  startLon,
+  endLat,
+  endLon,
+  initialEta = 14,
+  totalSteps = 14,
+}) {
+  stopMovementSimulation(requestId);
+
+  const sLat = Number(startLat) || 12.9716;
+  const sLon = Number(startLon) || 77.6358;
+  const eLat = Number(endLat) || 12.9784;
+  const eLon = Number(endLon) || 77.6408;
+  const steps = Math.max(5, Number(totalSteps) || 14);
+
+  let currentStep = 0;
+
+  const interval = setInterval(async () => {
+    currentStep++;
+    const t = Math.min(1.0, currentStep / steps);
+    const curLat = Number((sLat + (eLat - sLat) * t).toFixed(6));
+    const curLon = Number((sLon + (eLon - sLon) * t).toFixed(6));
+    const remainingEta = t >= 1.0 ? 0 : Math.max(1, Math.ceil(initialEta * (1 - t)));
+
+    const positionPayload = {
+      requestId,
+      latitude: curLat,
+      longitude: curLon,
+      progress: t,
+      eta_minutes: remainingEta,
+      status: 'partner_on_way',
+      step_index: 2,
+    };
+
+    if (io) {
+      io.to(`request:${requestId}`).emit('partner_location', positionPayload);
+      io.to(`request:${requestId}`).emit('partner_location_update', positionPayload);
+      if (customerId) {
+        io.to(`customer:${customerId}`).emit('partner_location', positionPayload);
+        io.to(`customer:${customerId}`).emit('partner_location_update', positionPayload);
+      }
+      if (partnerId) {
+        io.to(`partner:${partnerId}`).emit('partner_location', positionPayload);
+        io.to(`partner:${partnerId}`).emit('partner_location_update', positionPayload);
+      }
+    }
+
+    if (t >= 1.0) {
+      stopMovementSimulation(requestId);
+    }
+  }, 1000);
+
+  activeMovementSimulations.set(String(requestId), interval);
+}
+
+/**
+ * Stops any active movement simulation for a request
+ *
+ * @param {string} requestId
+ */
+export function stopMovementSimulation(requestId) {
+  const existing = activeMovementSimulations.get(String(requestId));
+  if (existing) {
+    clearInterval(existing);
+    activeMovementSimulations.delete(String(requestId));
+  }
+}
+
+/**
  * Broadcasts a status transition to customer and partner rooms
  *
  * @param {string} requestId
- * @param {string} status ('on_the_way' | 'arrived' | 'in_progress' | 'completed' | 'paid' | 'cancelled')
+ * @param {string} status ('on_the_way' | 'arrived' | 'service_started' | 'service_completed' | 'payment_completed' | 'cancelled')
  * @param {number} stepIndex (1..6)
  * @param {object} [extraData] Additional payload details (customer_id, partner_id, etc.)
  */
@@ -533,6 +663,9 @@ export default {
   handlePartnerAccept,
   handlePartnerDecline,
   handleCustomerCancel,
+  startMovementSimulation,
+  stopMovementSimulation,
   notifyRequestStatusUpdate,
   getActiveDispatch,
 };
+

@@ -735,17 +735,17 @@ export function setActiveJob(job) {
 export async function advanceJobStep(jobId, currentStep, enteredOtp = null) {
   const job = getActiveJob();
 
-  // 1. If at 'arrived', partner submits OTP to server for verification
-  if (currentStep === 'arrived') {
+  // 1. If at 'arrived' or 'partner_arrived', partner submits OTP to server for verification
+  if (currentStep === 'arrived' || currentStep === 'partner_arrived') {
     try {
       const res = await post(`/api/requests/${jobId}/verify-otp`, {
-        otp: enteredOtp?.trim(),
+        otp: enteredOtp?.toString().trim(),
       });
       if (res && res.status === 'success') {
         const updated = {
           ...(job || {}),
           id: jobId,
-          status: 'in_progress',
+          status: 'service_started',
           step_index: 4,
           service_started_at: new Date().toISOString(),
           otp_verified: true,
@@ -758,18 +758,30 @@ export async function advanceJobStep(jobId, currentStep, enteredOtp = null) {
     }
   }
 
-  // 2. Map other status transitions
+  // 2. Map other status transitions (SRS FR-P9)
   const nextStatusMap = {
-    accepted: 'on_the_way',
-    on_the_way: 'arrived',
-    in_progress: 'completed',
-    completed: 'paid',
+    accepted: 'partner_on_way',
+    start_trip: 'partner_on_way',
+    on_the_way: 'partner_arrived',
+    partner_on_way: 'partner_arrived',
+    arrived: 'service_started',
+    partner_arrived: 'service_started',
+    in_progress: 'service_completed',
+    service_started: 'service_completed',
+    completed: 'payment_completed',
+    service_completed: 'payment_completed',
   };
   const nextStepIndexMap = {
     accepted: 2,
+    start_trip: 2,
     on_the_way: 3,
+    partner_on_way: 3,
+    arrived: 4,
+    partner_arrived: 4,
     in_progress: 5,
+    service_started: 5,
     completed: 6,
+    service_completed: 6,
   };
 
   const targetStatus = nextStatusMap[currentStep] || currentStep;
@@ -783,7 +795,7 @@ export async function advanceJobStep(jobId, currentStep, enteredOtp = null) {
   }
 
   // If completed / paid: direct cash/UPI settlement confirmed
-  if (targetStatus === 'paid') {
+  if (targetStatus === 'payment_completed' || targetStatus === 'paid') {
     const settlementAmount = job?.amount || 450.0;
     const currentPartner = getActivePartner();
     const earnings = getStoredEarnings(currentPartner?.id);
@@ -836,7 +848,7 @@ export async function advanceJobStep(jobId, currentStep, enteredOtp = null) {
 
     return {
       id: jobId,
-      status: 'paid',
+      status: 'payment_completed',
       step_index: 6,
       settlement: {
         ...newEntry,
@@ -846,7 +858,7 @@ export async function advanceJobStep(jobId, currentStep, enteredOtp = null) {
   }
 
   // If partner completes service work, record completed entry into history
-  if (targetStatus === 'completed') {
+  if (targetStatus === 'service_completed' || targetStatus === 'completed') {
     savePartnerRecentJob({
       id: jobId || Date.now(),
       order_number:
@@ -879,10 +891,18 @@ export async function advanceJobStep(jobId, currentStep, enteredOtp = null) {
  * Accept Incoming Request (SRS FR-P9)
  */
 export async function acceptIncomingJob(jobData) {
-  await new Promise((resolve) => setTimeout(resolve, 200));
+  const reqId = jobData?.id || jobData?.request_id;
+  try {
+    if (reqId) {
+      await post(`/api/requests/${reqId}/respond`, { decision: 'accept' });
+    }
+  } catch (apiErr) {
+    console.warn('[PartnerService Accept API Warning]:', apiErr.message);
+  }
 
   const newActiveJob = {
     ...jobData,
+    id: reqId,
     status: 'accepted',
     step_index: 1,
     accepted_at: new Date().toISOString(),

@@ -487,7 +487,7 @@ export const mockIncomingJob = {
   coordinates: { lat: 12.9784, lng: 77.6408 },
   distance_km: 0.8,
   estimated_arrival_minutes: 12,
-  service_otp: '8392',
+  service_otp: '839214',
   settlement_note: 'Direct payment between you and customer on-site (0% platform cut)',
   created_at: '2026-10-16T11:45:00Z',
 };

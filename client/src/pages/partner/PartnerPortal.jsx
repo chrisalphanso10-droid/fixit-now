@@ -19,9 +19,12 @@ import PartnerProfileView from './PartnerProfileView';
 import IncomingRequestPopup from './IncomingRequestPopup';
 import {
   getActivePartner,
+  setActivePartner,
   getPartnerDashboardData,
   getPartnerSubscription,
   getActiveJob,
+  setActiveJob,
+  savePartnerRecentJob,
   togglePartnerOnline,
   switchDemoPartnerAccount,
   getMockIncomingJob,
@@ -146,10 +149,35 @@ export default function PartnerPortal({
       setIncomingJob((cur) => {
         if (
           cur &&
-          (String(cur.id) === String(data?.requestId) ||
-            String(cur.request_id) === String(data?.requestId))
+          (!data?.requestId ||
+            String(cur.id) === String(data.requestId) ||
+            String(cur.request_id) === String(data.requestId))
         ) {
           showToast('Customer cancelled the request.');
+          return null;
+        }
+        return cur;
+      });
+
+      setActiveJobState((cur) => {
+        if (
+          cur &&
+          (!data?.requestId ||
+            String(cur.id) === String(data.requestId) ||
+            String(cur.request_id) === String(data.requestId))
+        ) {
+          savePartnerRecentJob({
+            ...cur,
+            status: 'cancelled',
+            cancel_reason: data?.reason || 'Cancelled by customer',
+            completed_at: new Date().toISOString(),
+          });
+          setActiveJob(null);
+          showToast(
+            `! Work order cancelled by customer: "${data?.reason || 'Cancelled'}". You are now free for new dispatches.`,
+            true
+          );
+          refreshPartnerData();
           return null;
         }
         return cur;
