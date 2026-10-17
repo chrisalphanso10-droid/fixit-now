@@ -39,13 +39,23 @@ export default function PartnerPortal({
 }) {
   const { user: authUser } = useAuth() || {};
   const [activeTab, setActiveTab] = useState(initialTab);
-  const [partner, setPartner] = useState(authUser || null);
+  const [partner, setPartner] = useState(() => authUser || getActivePartner());
   const [subscription, setSubscription] = useState(null);
   const [dashboardData, setDashboardData] = useState(null);
   const [activeJob, setActiveJobState] = useState(null);
-  const [online, setOnline] = useState(true);
+  const [online, setOnline] = useState(() => (authUser?.online !== undefined ? Boolean(authUser.online) : Boolean(getActivePartner()?.online)));
   const [incomingJob, setIncomingJob] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
+
+  // Sync when authUser updates from AuthContext (/api/auth/me)
+  useEffect(() => {
+    if (authUser && authUser.role === 'partner') {
+      setPartner((prev) => ({ ...(prev || {}), ...authUser }));
+      if (authUser.online !== undefined) {
+        setOnline(Boolean(authUser.online));
+      }
+    }
+  }, [authUser]);
 
   // Sync hash routing
   useEffect(() => {
@@ -78,13 +88,23 @@ export default function PartnerPortal({
   const refreshPartnerData = async () => {
     const currentPartner = authUser || getActivePartner();
     setPartner(currentPartner);
-    setOnline(Boolean(currentPartner.online));
+    setOnline(Boolean(currentPartner?.online));
 
     const sub = await getPartnerSubscription(currentPartner.id);
     setSubscription(sub);
 
     const dash = await getPartnerDashboardData(currentPartner.id);
     setDashboardData(dash);
+
+    if (dash?.partner) {
+      const mergedPartner = { ...currentPartner, ...dash.partner };
+      setPartner(mergedPartner);
+      setOnline(Boolean(dash.partner.online));
+      setActivePartner(mergedPartner);
+    }
+    if (dash?.subscription) {
+      setSubscription(dash.subscription);
+    }
 
     const job = getActiveJob();
     setActiveJobState(job);
@@ -104,8 +124,13 @@ export default function PartnerPortal({
   const handleToggleOnline = async () => {
     try {
       const updated = await togglePartnerOnline(partner?.id || 101);
-      setPartner(updated);
-      setOnline(updated.online);
+      const merged = { ...(partner || {}), ...updated };
+      setPartner(merged);
+      setOnline(Boolean(updated.online));
+      setDashboardData((prev) => (prev ? {
+        ...prev,
+        partner: { ...(prev.partner || {}), ...merged },
+      } : prev));
       showToast(updated.online ? '● You are now ONLINE — listening for dispatches in 2 km.' : '○ You are now OFFLINE — radar paused.');
     } catch (err) {
       showToast(err.message || 'Unable to toggle online status.', true);

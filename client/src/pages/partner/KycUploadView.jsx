@@ -7,7 +7,9 @@
 import { useState, useEffect } from 'react';
 import {
   getPartnerKyc,
+  submitPartnerKyc,
   resubmitPartnerKyc,
+  reviewPartnerKyc,
   getActivePartner,
 } from '../../services/partnerService';
 
@@ -29,7 +31,7 @@ export default function KycUploadView({
   const [photoFile, setPhotoFile] = useState(null);
   const [tradeCertFile, setTradeCertFile] = useState(null);
 
-  // Allow switching view state locally for demonstration
+  // Allow switching view state locally for demonstration/testing
   const [forcedState, setForcedState] = useState(null);
 
   const activePartner = partner || getActivePartner();
@@ -45,6 +47,9 @@ export default function KycUploadView({
       if (data.govt_id_type) {
         setIdType(data.govt_id_type);
       }
+      if (data.status && onKycUpdated && data.status !== activePartner?.kyc_status) {
+        onKycUpdated(data);
+      }
     } catch {
       setError('Unable to load KYC status.');
     } finally {
@@ -54,9 +59,9 @@ export default function KycUploadView({
 
   useEffect(() => {
     loadKyc();
-  }, [activePartner.id]);
+  }, [activePartner?.id]);
 
-  const effectiveStatus = forcedState || kycData?.status || activePartner?.kyc_status || 'pending';
+  const effectiveStatus = forcedState || kycData?.status || activePartner?.kyc_status || 'not_submitted';
   const rejectionReason =
     kycData?.rejection_reason ||
     activePartner?.rejection_reason ||
@@ -74,24 +79,96 @@ export default function KycUploadView({
       return;
     }
 
+    // Client-side file validation (SRS Section 4)
+    if (effectiveStatus === 'not_submitted' || effectiveStatus === 'rejected') {
+      if (!docFile && (!kycData?.documents || kycData.documents.length === 0)) {
+        setError('! Government identity document (PDF format) is required.');
+        setSubmitting(false);
+        return;
+      }
+
+      if (docFile) {
+        const isPdf = docFile.type === 'application/pdf' || docFile.name.toLowerCase().endsWith('.pdf');
+        if (!isPdf) {
+          setError('! Identity document must be in PDF format (SRS FR-P4).');
+          setSubmitting(false);
+          return;
+        }
+        if (docFile.size > 5 * 1024 * 1024) {
+          setError('! Identity document file size exceeds the 5MB limit.');
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      if (photoFile) {
+        const isImage = ['image/jpeg', 'image/jpg', 'image/png'].includes(photoFile.type) ||
+          ['.jpg', '.jpeg', '.png'].some((ext) => photoFile.name.toLowerCase().endsWith(ext));
+        if (!isImage) {
+          setError('! Passport photograph must be in JPEG or PNG format (SRS FR-P4).');
+          setSubmitting(false);
+          return;
+        }
+        if (photoFile.size > 2 * 1024 * 1024) {
+          setError('! Passport photo file size exceeds the 2MB limit.');
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      if (tradeCertFile) {
+        const isPdf = tradeCertFile.type === 'application/pdf' || tradeCertFile.name.toLowerCase().endsWith('.pdf');
+        if (!isPdf) {
+          setError('! Trade qualification certificate must be in PDF format.');
+          setSubmitting(false);
+          return;
+        }
+        if (tradeCertFile.size > 5 * 1024 * 1024) {
+          setError('! Trade certificate file size exceeds the 5MB limit.');
+          setSubmitting(false);
+          return;
+        }
+      }
+    }
+
     try {
       const payload = {
         govt_id_type: idType,
         id_number: idNumber.trim(),
-        document_name: docFile?.name || `${idType.replace(/\s+/g, '_')}_Scan.pdf`,
-        photo_name: photoFile?.name || 'partner_passport_photo.jpg',
-        trade_cert_name: tradeCertFile?.name || `${activePartner.service_name || 'Trade'}_Cert.pdf`,
+        documentFile: docFile,
+        photoFile: photoFile,
+        tradeCertFile: tradeCertFile,
       };
 
-      const updated = await resubmitPartnerKyc(activePartner.id, payload);
+      const updated = await submitPartnerKyc(activePartner.id, payload);
       setKycData(updated);
       setForcedState('pending');
-      setSuccessMessage('KYC documents submitted successfully to Admin verification desk!');
+      setSuccessMessage('KYC documents successfully uploaded and submitted for administrator review (SRS FR-P5)!');
       if (onKycUpdated) onKycUpdated(updated);
+      loadKyc();
     } catch (err) {
       setError(`! ${err.message || 'Submission failed.'}`);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Simulated Admin Review helper for demonstration
+  const handleSimulateDecision = async (decision) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const reason = decision === 'rejected'
+        ? 'Identity scan resolution is insufficient. Please upload a 300+ DPI color PDF scan.'
+        : null;
+      await reviewPartnerKyc(activePartner.id, decision, reason);
+      setForcedState(decision);
+      await loadKyc();
+      if (onKycUpdated) onKycUpdated({ status: decision, rejection_reason: reason });
+    } catch (err) {
+      setError(`! Decision update failed: ${err.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -123,45 +200,49 @@ export default function KycUploadView({
             </h1>
           </div>
 
-          {/* Current State Stamp */}
+          {/* Current State Rubber Stamp (docs/DESIGN.md Section 5) */}
           <div className="flex items-center gap-2 self-start sm:self-auto">
             <span
-              className={`border-2 px-3 py-1 font-mono text-xs font-bold uppercase shadow-hard-sm ${
+              className={`border-2 px-3 py-1 font-mono text-xs font-bold uppercase shadow-hard-sm inline-block -rotate-3 transition-transform ${
                 effectiveStatus === 'verified'
                   ? 'border-done bg-done text-paper'
                   : effectiveStatus === 'rejected'
                   ? 'border-signal bg-paper text-ink'
-                  : 'border-[var(--theme-border)] bg-concrete text-ink'
+                  : effectiveStatus === 'pending'
+                  ? 'border-ink bg-concrete text-ink'
+                  : 'border-signal bg-paper text-signal'
               }`}
             >
               {effectiveStatus === 'verified'
-                ? '✓ VERIFIED & APPROVED'
+                ? 'VERIFIED'
                 : effectiveStatus === 'rejected'
-                ? '✕ KYC REJECTED'
-                : '⏳ PENDING REVIEW'}
+                ? 'REJECTED'
+                : effectiveStatus === 'pending'
+                ? 'PENDING'
+                : 'NOT SUBMITTED'}
             </span>
           </div>
         </div>
 
-        {/* State Preview Switcher for Testing (Prompt 3 Requirements) */}
+        {/* State Preview Switcher for Testing (Prompt Requirements) */}
         <div className="p-3 border border-[var(--theme-border)] bg-[var(--theme-bg)] flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
           <span className="font-bold text-[var(--theme-text-soft)] uppercase">
-            Test Compliance States (SRS Sec. 6):
+            Test Compliance States (SRS Sec. 6 &amp; FR-P5):
           </span>
           <div className="flex flex-wrap gap-1.5">
             <button
               type="button"
               onClick={() => {
-                setForcedState('verified');
+                setForcedState('not_submitted');
                 setError(null);
               }}
               className={`px-2.5 py-1 border text-[11px] font-bold ${
-                effectiveStatus === 'verified'
-                  ? 'bg-done text-paper border-done'
+                effectiveStatus === 'not_submitted'
+                  ? 'bg-signal text-ink border-signal'
                   : 'bg-[var(--theme-surface)] text-[var(--theme-text-main)] border-[var(--theme-border)] hover:bg-signal hover:text-ink'
               }`}
             >
-              1. Verified State
+              1. Not Submitted
             </button>
             <button
               type="button"
@@ -175,7 +256,21 @@ export default function KycUploadView({
                   : 'bg-[var(--theme-surface)] text-[var(--theme-text-main)] border-[var(--theme-border)] hover:bg-signal hover:text-ink'
               }`}
             >
-              2. Pending Review State
+              2. Pending Review
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setForcedState('verified');
+                setError(null);
+              }}
+              className={`px-2.5 py-1 border text-[11px] font-bold ${
+                effectiveStatus === 'verified'
+                  ? 'bg-done text-paper border-done'
+                  : 'bg-[var(--theme-surface)] text-[var(--theme-text-main)] border-[var(--theme-border)] hover:bg-signal hover:text-ink'
+              }`}
+            >
+              3. Verified
             </button>
             <button
               type="button"
@@ -185,11 +280,11 @@ export default function KycUploadView({
               }}
               className={`px-2.5 py-1 border text-[11px] font-bold ${
                 effectiveStatus === 'rejected'
-                  ? 'bg-signal text-ink border-signal'
+                  ? 'border-signal bg-paper text-ink'
                   : 'bg-[var(--theme-surface)] text-[var(--theme-text-main)] border-[var(--theme-border)] hover:bg-signal hover:text-ink'
               }`}
             >
-              3. Rejected State (w/ reason)
+              4. Rejected
             </button>
           </div>
         </div>
@@ -215,7 +310,142 @@ export default function KycUploadView({
       )}
 
       {/* ============================================================== */}
-      {/* STATE 1: VERIFIED STATE                                        */}
+      {/* STATE 0: NOT SUBMITTED STATE (Initial Upload Form)              */}
+      {/* ============================================================== */}
+      {effectiveStatus === 'not_submitted' && (
+        <div
+          className="bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] p-6 sm:p-8 shadow-hard space-y-6"
+          style={{ borderRadius: 0 }}
+        >
+          <div className="border-b-2 border-[var(--theme-border)] pb-4">
+            <span className="font-mono text-xs font-bold uppercase tracking-wider text-signal block mb-1">
+              STEP 3 OF 3: IDENTITY &amp; TRADE QUALIFICATION KYC
+            </span>
+            <h2 className="font-display font-extrabold text-xl sm:text-2xl text-[var(--theme-text-main)]">
+              Complete Your Partner Verification Dossier
+            </h2>
+            <p className="font-mono text-xs sm:text-sm text-[var(--theme-text-soft)] mt-1 max-w-2xl">
+              Per FixIt Now Trust &amp; Safety rules (SRS FR-P4 &amp; BR-5), partners must submit verified government identity documents (PDF) and a passport photograph (JPEG/PNG) to unlock live dispatches.
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmitForm} className="space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label
+                  htmlFor="kyc-id-type"
+                  className="block font-mono text-xs font-bold uppercase tracking-wider mb-1"
+                >
+                  Government ID Type <span className="text-signal">*</span>
+                </label>
+                <select
+                  id="kyc-id-type"
+                  value={idType}
+                  onChange={(e) => setIdType(e.target.value)}
+                  className="w-full min-h-[44px] px-3 border-2 border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text-main)] font-mono text-xs focus:outline-none focus:border-signal"
+                >
+                  <option value="Aadhaar Card">Aadhaar Card (Front &amp; Back)</option>
+                  <option value="Permanent Account Number (PAN)">PAN Card</option>
+                  <option value="Voter ID Card">Voter ID Card</option>
+                  <option value="Driving License">Driving License</option>
+                  <option value="Passport">Passport</option>
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="kyc-id-number"
+                  className="block font-mono text-xs font-bold uppercase tracking-wider mb-1"
+                >
+                  ID Document Number <span className="text-signal">*</span>
+                </label>
+                <input
+                  id="kyc-id-number"
+                  type="text"
+                  required
+                  value={idNumber}
+                  onChange={(e) => setIdNumber(e.target.value)}
+                  placeholder="e.g., 5412 8891 0023"
+                  className="w-full min-h-[44px] px-3 border-2 border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text-main)] font-mono text-xs focus:outline-none focus:border-signal"
+                />
+              </div>
+            </div>
+
+            {/* Document Upload Fields */}
+            <div className="space-y-4 font-mono text-xs">
+              <div className="p-4 border-2 border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)]">
+                <label
+                  htmlFor="kyc-doc-file"
+                  className="block font-bold uppercase tracking-wider mb-1"
+                >
+                  1. Government Photo ID Document (PDF format only, max 5MB) <span className="text-signal">*</span>
+                </label>
+                <input
+                  id="kyc-doc-file"
+                  type="file"
+                  required
+                  accept=".pdf,application/pdf"
+                  onChange={(e) => setDocFile(e.target.files[0] || null)}
+                  className="w-full p-2 border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-main)] file:mr-3 file:py-1 file:px-3 file:border-2 file:border-ink file:bg-signal file:text-ink file:font-mono file:text-xs file:font-bold hover:border-signal cursor-pointer"
+                />
+                <span className="text-[10px] text-[var(--theme-text-soft)] mt-1 block">
+                  Accepted: Official PDF scan of Aadhaar, PAN, Voter ID, Driving License, or Passport.
+                </span>
+              </div>
+
+              <div className="p-4 border-2 border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)]">
+                <label
+                  htmlFor="kyc-photo-file"
+                  className="block font-bold uppercase tracking-wider mb-1"
+                >
+                  2. Recent Passport Size Photograph (JPEG or PNG only, max 2MB) <span className="text-signal">*</span>
+                </label>
+                <input
+                  id="kyc-photo-file"
+                  type="file"
+                  required
+                  accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                  onChange={(e) => setPhotoFile(e.target.files[0] || null)}
+                  className="w-full p-2 border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-main)] file:mr-3 file:py-1 file:px-3 file:border-2 file:border-ink file:bg-signal file:text-ink file:font-mono file:text-xs file:font-bold hover:border-signal cursor-pointer"
+                />
+                <span className="text-[10px] text-[var(--theme-text-soft)] mt-1 block">
+                  Clear color headshot with neutral background. Displayed on work order tickets.
+                </span>
+              </div>
+
+              <div className="p-4 border-2 border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)]">
+                <label
+                  htmlFor="kyc-cert-file"
+                  className="block font-bold uppercase tracking-wider mb-1"
+                >
+                  3. Trade Qualification or Apprentice Certificate (PDF format, Optional)
+                </label>
+                <input
+                  id="kyc-cert-file"
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  onChange={(e) => setTradeCertFile(e.target.files[0] || null)}
+                  className="w-full p-2 border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-main)] file:mr-3 file:py-1 file:px-3 file:border-2 file:border-ink file:bg-concrete file:text-ink file:font-mono file:text-xs file:font-bold hover:border-signal cursor-pointer"
+                />
+                <span className="text-[10px] text-[var(--theme-text-soft)] mt-1 block">
+                  ITI / NCVT certificate, trade license or employer recommendation letter for {activePartner.service_name || 'Trade'}.
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="btn-primary w-full min-h-[50px] font-mono text-xs font-bold uppercase tracking-wider shadow-hard"
+            >
+              {submitting ? 'TRANSMITTING ENCRYPTED DOSSIER...' : 'SUBMIT KYC VERIFICATION DOSSIER →'}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* STATE 1: VERIFIED STATE (SRS FR-P5, FR-P7)                     */}
       {/* ============================================================== */}
       {effectiveStatus === 'verified' && (
         <div
@@ -232,12 +462,12 @@ export default function KycUploadView({
                   Compliance Verification Complete
                 </h3>
                 <p className="font-mono text-xs text-muted">
-                  Partner ID: <span className="font-bold text-ink">PTR-{activePartner.id}</span> · Verified Trade: <span className="font-bold text-ink">{activePartner.service_name || 'Certified Trade'}</span>
+                  Partner ID: <span className="font-bold text-ink">PTR-{String(activePartner.id).slice(0, 8)}</span> · Verified Trade: <span className="font-bold text-ink">{activePartner.service_name || 'Certified Trade'}</span>
                 </p>
               </div>
             </div>
 
-            <div className="font-mono text-xs text-right">
+            <div className="font-mono text-xs text-left sm:text-right">
               <span className="text-muted block">VERIFICATION EXPIRY:</span>
               <span className="font-bold text-done">LIFETIME CERTIFIED</span>
             </div>
@@ -249,59 +479,42 @@ export default function KycUploadView({
               VERIFIED COMPLIANCE DOCUMENTS ON RECORD:
             </div>
             <div className="divide-y-2 divide-[var(--theme-border)] font-mono text-xs">
-              <div className="p-3.5 flex items-center justify-between">
-                <div>
-                  <span className="font-bold block text-[var(--theme-text-main)]">1. Government Photo ID</span>
-                  <span className="text-[var(--theme-text-soft)]">{kycData?.govt_id_type || 'Aadhaar Card'} · {kycData?.id_number || '•••• •••• 1024'}</span>
-                </div>
-                <span className="px-2 py-0.5 border border-done bg-done text-paper text-[10px] font-bold">
-                  MATCHED &amp; VALIDATED
-                </span>
+              <div className="p-3 flex justify-between items-center gap-2 flex-wrap">
+                <span>Government ID ({kycData?.govt_id_type || 'Aadhaar Card'})</span>
+                <span className="text-[10px] font-bold text-done uppercase">✓ Verified &amp; Encrypted</span>
               </div>
-
-              <div className="p-3.5 flex items-center justify-between">
-                <div>
-                  <span className="font-bold block text-[var(--theme-text-main)]">2. Passport Size Face Photograph</span>
-                  <span className="text-[var(--theme-text-soft)]">{kycData?.photo_name || 'partner_passport_photo.png'}</span>
-                </div>
-                <span className="px-2 py-0.5 border border-done bg-done text-paper text-[10px] font-bold">
-                  BIOMETRIC MATCH
-                </span>
+              <div className="p-3 flex justify-between items-center gap-2 flex-wrap">
+                <span>Partner Passport Photograph</span>
+                <span className="text-[10px] font-bold text-done uppercase">✓ Verified</span>
               </div>
-
-              <div className="p-3.5 flex items-center justify-between">
-                <div>
-                  <span className="font-bold block text-[var(--theme-text-main)]">3. Certified Trade Qualification Certificate</span>
-                  <span className="text-[var(--theme-text-soft)]">{kycData?.trade_cert_name || 'Trade_Qualification_Cert.pdf'} ({activePartner.service_name || 'Plumbing'})</span>
-                </div>
-                <span className="px-2 py-0.5 border border-done bg-done text-paper text-[10px] font-bold">
-                  SKILL ACCREDITED
-                </span>
+              <div className="p-3 flex justify-between items-center gap-2 flex-wrap">
+                <span>Trade Qualification Certificate ({activePartner.service_name || 'Trade'})</span>
+                <span className="text-[10px] font-bold text-done uppercase">✓ Verified</span>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+          <div className="pt-2 flex flex-col sm:flex-row gap-3">
             <button
               type="button"
               onClick={onNavigateToDashboard}
               className="btn-primary min-h-[48px] px-6 font-mono text-xs font-bold uppercase tracking-wider shadow-hard"
             >
-              LAUNCH LIVE DISPATCH RADAR →
+              GO TO LIVE RADAR DISPATCH DASHBOARD →
             </button>
           </div>
         </div>
       )}
 
       {/* ============================================================== */}
-      {/* STATE 2: PENDING REVIEW STATE                                  */}
+      {/* STATE 2: PENDING REVIEW STATE (SRS FR-P5)                      */}
       {/* ============================================================== */}
       {effectiveStatus === 'pending' && (
         <div
           className="bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] p-6 sm:p-8 shadow-hard space-y-6"
           style={{ borderRadius: 0 }}
         >
-          <div className="p-4 border-2 border-signal bg-paper text-ink space-y-2">
+          <div className="p-4 border-2 border-ink bg-concrete text-ink space-y-2">
             <div className="flex items-center gap-3">
               <span className="w-4 h-4 bg-signal animate-pulse inline-block" />
               <h3 className="font-display font-extrabold text-lg text-ink uppercase">
@@ -311,7 +524,7 @@ export default function KycUploadView({
             <p className="font-mono text-xs text-soft leading-relaxed">
               Your documents were submitted to the FixIt Now compliance desk on{' '}
               <span className="font-bold text-ink">
-                {new Date(kycData?.submitted_at || '2026-10-15T10:00:00Z').toLocaleDateString('en-IN', {
+                {new Date(kycData?.submitted_at || Date.now()).toLocaleDateString('en-IN', {
                   day: 'numeric',
                   month: 'short',
                   year: 'numeric',
@@ -339,19 +552,47 @@ export default function KycUploadView({
               DOCUMENTS SUBMITTED &amp; PENDING INSPECTION:
             </div>
             <div className="divide-y-2 divide-[var(--theme-border)] font-mono text-xs">
-              <div className="p-3 flex justify-between items-center">
-                <span>Government ID ({kycData?.govt_id_type || 'Aadhaar'}): {kycData?.id_number || '•••• 1024'}</span>
+              <div className="p-3 flex justify-between items-center gap-2 flex-wrap">
+                <span>Government ID ({kycData?.govt_id_type || idType || 'Aadhaar'}): {kycData?.id_number || idNumber || '•••• •••• 1024'}</span>
                 <span className="text-[10px] font-bold text-signal uppercase">Under Review</span>
               </div>
-              <div className="p-3 flex justify-between items-center">
-                <span>Partner Passport Photograph: {kycData?.photo_name || 'passport_photo.png'}</span>
+              <div className="p-3 flex justify-between items-center gap-2 flex-wrap">
+                <span>Partner Passport Photograph: {photoFile?.name || kycData?.photo_name || 'passport_photo.png'}</span>
                 <span className="text-[10px] font-bold text-signal uppercase">Under Review</span>
               </div>
-              <div className="p-3 flex justify-between items-center">
-                <span>Trade Certificate ({activePartner.service_name || 'Trade'}): {kycData?.trade_cert_name || 'Trade_Cert.pdf'}</span>
+              <div className="p-3 flex justify-between items-center gap-2 flex-wrap">
+                <span>Trade Certificate ({activePartner.service_name || 'Trade'}): {tradeCertFile?.name || kycData?.trade_cert_name || 'Trade_Cert.pdf'}</span>
                 <span className="text-[10px] font-bold text-signal uppercase">Under Review</span>
               </div>
             </div>
+          </div>
+
+          <div className="pt-2 flex flex-col sm:flex-row gap-3">
+            <button
+              type="button"
+              onClick={onNavigateToDashboard}
+              className="border-2 border-[var(--theme-border)] bg-[var(--theme-bg)] min-h-[48px] px-6 font-mono text-xs font-bold uppercase tracking-wider hover:border-signal"
+            >
+              ← RETURN TO DASHBOARD
+            </button>
+
+            {/* Simulated reviewer decision controls for demo verification */}
+            <button
+              type="button"
+              onClick={() => handleSimulateDecision('verified')}
+              className="border-2 border-done bg-done text-paper min-h-[48px] px-4 font-mono text-xs font-bold uppercase tracking-wider shadow-hard-sm"
+              title="Test approval flow"
+            >
+              [DEMO] SIMULATE ADMIN APPROVAL ✓
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSimulateDecision('rejected')}
+              className="border-2 border-signal bg-paper text-ink min-h-[48px] px-4 font-mono text-xs font-bold uppercase tracking-wider shadow-hard-sm"
+              title="Test rejection flow"
+            >
+              [DEMO] SIMULATE ADMIN REJECTION ✕
+            </button>
           </div>
         </div>
       )}
@@ -388,7 +629,7 @@ export default function KycUploadView({
             </div>
 
             <p className="font-mono text-xs text-soft leading-relaxed">
-              Please review the reason above, correct your documents, and resubmit using the form below. Resubmitted applications receive priority desk review within 1 hour.
+              Please review the reason above, correct your documents, and resubmit using the form below. Resubmitted applications receive priority desk review.
             </p>
           </div>
 
@@ -401,13 +642,13 @@ export default function KycUploadView({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label
-                  htmlFor="kyc-id-type"
+                  htmlFor="kyc-id-type-resubmit"
                   className="block font-mono text-xs font-bold uppercase tracking-wider mb-1"
                 >
                   Government ID Type <span className="text-signal">*</span>
                 </label>
                 <select
-                  id="kyc-id-type"
+                  id="kyc-id-type-resubmit"
                   value={idType}
                   onChange={(e) => setIdType(e.target.value)}
                   className="w-full min-h-[44px] px-3 border-2 border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text-main)] font-mono text-xs focus:outline-none focus:border-signal"
@@ -416,18 +657,19 @@ export default function KycUploadView({
                   <option value="Permanent Account Number (PAN)">PAN Card</option>
                   <option value="Voter ID Card">Voter ID Card</option>
                   <option value="Driving License">Driving License</option>
+                  <option value="Passport">Passport</option>
                 </select>
               </div>
 
               <div>
                 <label
-                  htmlFor="kyc-id-number"
+                  htmlFor="kyc-id-number-resubmit"
                   className="block font-mono text-xs font-bold uppercase tracking-wider mb-1"
                 >
                   ID Document Number <span className="text-signal">*</span>
                 </label>
                 <input
-                  id="kyc-id-number"
+                  id="kyc-id-number-resubmit"
                   type="text"
                   required
                   value={idNumber}
@@ -440,51 +682,51 @@ export default function KycUploadView({
 
             {/* Document Upload Dropzones */}
             <div className="space-y-3 font-mono text-xs">
-              <div>
+              <div className="p-4 border-2 border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)]">
                 <label
-                  htmlFor="kyc-doc-file"
+                  htmlFor="kyc-doc-file-resubmit"
                   className="block font-bold uppercase tracking-wider mb-1"
                 >
-                  Clear Photo / Color Scan of Government ID (PDF / JPEG / PNG) <span className="text-signal">*</span>
+                  Clear Photo / Color Scan of Government ID (PDF format only, max 5MB) <span className="text-signal">*</span>
                 </label>
                 <input
-                  id="kyc-doc-file"
+                  id="kyc-doc-file-resubmit"
                   type="file"
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  onChange={(e) => setDocFile(e.target.files[0])}
-                  className="w-full p-2 border-2 border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text-main)] file:mr-3 file:py-1 file:px-3 file:border file:border-ink file:bg-concrete file:font-mono file:text-xs file:font-bold hover:border-signal cursor-pointer"
+                  accept=".pdf,application/pdf"
+                  onChange={(e) => setDocFile(e.target.files[0] || null)}
+                  className="w-full p-2 border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-main)] file:mr-3 file:py-1 file:px-3 file:border-2 file:border-ink file:bg-signal file:text-ink file:font-mono file:text-xs file:font-bold hover:border-signal cursor-pointer"
                 />
               </div>
 
-              <div>
+              <div className="p-4 border-2 border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)]">
                 <label
-                  htmlFor="kyc-photo-file"
+                  htmlFor="kyc-photo-file-resubmit"
                   className="block font-bold uppercase tracking-wider mb-1"
                 >
-                  Recent Passport Size Photograph <span className="text-signal">*</span>
+                  Recent Passport Size Photograph (JPEG or PNG only, max 2MB) <span className="text-signal">*</span>
                 </label>
                 <input
-                  id="kyc-photo-file"
+                  id="kyc-photo-file-resubmit"
                   type="file"
-                  accept=".png,.jpg,.jpeg"
-                  onChange={(e) => setPhotoFile(e.target.files[0])}
-                  className="w-full p-2 border-2 border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text-main)] file:mr-3 file:py-1 file:px-3 file:border file:border-ink file:bg-concrete file:font-mono file:text-xs file:font-bold hover:border-signal cursor-pointer"
+                  accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                  onChange={(e) => setPhotoFile(e.target.files[0] || null)}
+                  className="w-full p-2 border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-main)] file:mr-3 file:py-1 file:px-3 file:border-2 file:border-ink file:bg-signal file:text-ink file:font-mono file:text-xs file:font-bold hover:border-signal cursor-pointer"
                 />
               </div>
 
-              <div>
+              <div className="p-4 border-2 border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)]">
                 <label
-                  htmlFor="kyc-cert-file"
+                  htmlFor="kyc-cert-file-resubmit"
                   className="block font-bold uppercase tracking-wider mb-1"
                 >
-                  Trade Certificate or Apprentice License ({activePartner.service_name || 'Trade'}) <span className="text-signal">*</span>
+                  Trade Certificate or Apprentice License ({activePartner.service_name || 'Trade'}) (PDF format, Optional)
                 </label>
                 <input
-                  id="kyc-cert-file"
+                  id="kyc-cert-file-resubmit"
                   type="file"
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  onChange={(e) => setTradeCertFile(e.target.files[0])}
-                  className="w-full p-2 border-2 border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text-main)] file:mr-3 file:py-1 file:px-3 file:border file:border-ink file:bg-concrete file:font-mono file:text-xs file:font-bold hover:border-signal cursor-pointer"
+                  accept=".pdf,application/pdf"
+                  onChange={(e) => setTradeCertFile(e.target.files[0] || null)}
+                  className="w-full p-2 border border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-main)] file:mr-3 file:py-1 file:px-3 file:border-2 file:border-ink file:bg-concrete file:text-ink file:font-mono file:text-xs file:font-bold hover:border-signal cursor-pointer"
                 />
               </div>
             </div>

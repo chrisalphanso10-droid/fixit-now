@@ -405,7 +405,7 @@ export async function registerPartner(req, res, next) {
       `INSERT INTO partners (
          name, email, password_hash, phone, address, service_id,
          vehicle, latitude, longitude, kyc_status, online, rating, total_jobs
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', false, 5.00, 0)
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'not_submitted', false, 5.00, 0)
        RETURNING id, name, email, phone, address, service_id, vehicle, latitude, longitude, kyc_status, online, rating, total_jobs, created_at`,
       [
         cleanName,
@@ -747,7 +747,7 @@ export async function getCurrentUser(req, res, next) {
       const result = await query(
         `SELECT p.id, p.name, p.email, p.phone, p.address, p.service_id,
                 s.name AS service_name, p.vehicle, p.latitude, p.longitude,
-                p.kyc_status, p.online, p.rating, p.total_jobs, p.created_at
+                p.kyc_status, p.rejection_reason, p.online, p.rating, p.total_jobs, p.created_at
          FROM partners p
          JOIN services s ON p.service_id = s.id
          WHERE p.id = $1`,

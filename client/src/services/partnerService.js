@@ -5,68 +5,52 @@
  * Conforms to SRS FR-P1 to FR-P15 and docs/DESIGN.md.
  */
 
+import { get, post, postFormData, put } from './api';
 import {
   mockPartners,
-  mockSubscriptions,
-  mockKycDocuments,
   mockPartnerEarnings,
   mockPartnerRatings,
   mockIncomingJob,
-  mockPlans,
 } from '../mockData';
 
 const PARTNER_STORAGE_KEY = 'fixit_current_partner';
-const PARTNER_SUBSCRIPTIONS_KEY = 'fixit_partner_subscriptions_list';
-const PARTNER_KYC_KEY = 'fixit_partner_kyc_list';
 const PARTNER_EARNINGS_KEY = 'fixit_partner_earnings_data';
 const PARTNER_ACTIVE_JOB_KEY = 'fixit_partner_active_job';
 
-function getStoredSubscriptions() {
+function getStoredEarnings(partnerId) {
+  const currentId = partnerId || getActivePartner()?.id;
+  const key = currentId ? `fixit_partner_earnings_${currentId}` : PARTNER_EARNINGS_KEY;
   try {
-    const raw = localStorage.getItem(PARTNER_SUBSCRIPTIONS_KEY);
-    return raw ? JSON.parse(raw) : mockSubscriptions;
-  } catch {
-    return mockSubscriptions;
-  }
-}
-
-function saveStoredSubscriptions(subs) {
-  try {
-    localStorage.setItem(PARTNER_SUBSCRIPTIONS_KEY, JSON.stringify(subs));
+    const raw = localStorage.getItem(key);
+    if (raw) return JSON.parse(raw);
   } catch {
     // ignore
   }
-}
 
-function getStoredKycList() {
-  try {
-    const raw = localStorage.getItem(PARTNER_KYC_KEY);
-    return raw ? JSON.parse(raw) : mockKycDocuments;
-  } catch {
-    return mockKycDocuments;
-  }
-}
-
-function saveStoredKycList(list) {
-  try {
-    localStorage.setItem(PARTNER_KYC_KEY, JSON.stringify(list));
-  } catch {
-    // ignore
-  }
-}
-
-function getStoredEarnings() {
-  try {
-    const raw = localStorage.getItem(PARTNER_EARNINGS_KEY);
-    return raw ? JSON.parse(raw) : mockPartnerEarnings;
-  } catch {
+  // Only demo master plumber Rajesh Kumar (id: 101) starts with seeded demo earnings
+  if (currentId === 101 || currentId === '101') {
     return mockPartnerEarnings;
   }
+
+  // Any newly registered partner starts at 0 earnings, 0 jobs, and empty ledger
+  return {
+    partner_id: currentId,
+    total_earnings: 0.0,
+    total_jobs: 0,
+    today_earnings: 0.0,
+    today_jobs: 0,
+    this_week_earnings: 0.0,
+    this_week_jobs: 0,
+    this_month_earnings: 0.0,
+    ledger: [],
+  };
 }
 
-function saveStoredEarnings(earnings) {
+function saveStoredEarnings(earnings, partnerId) {
+  const currentId = partnerId || getActivePartner()?.id;
+  const key = currentId ? `fixit_partner_earnings_${currentId}` : PARTNER_EARNINGS_KEY;
   try {
-    localStorage.setItem(PARTNER_EARNINGS_KEY, JSON.stringify(earnings));
+    localStorage.setItem(key, JSON.stringify(earnings));
   } catch {
     // ignore
   }
@@ -82,10 +66,35 @@ function saveStoredEarnings(earnings) {
 export function getActivePartner() {
   try {
     const raw = localStorage.getItem(PARTNER_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      try {
+        const userRaw = localStorage.getItem('fixit_user');
+        if (userRaw) {
+          const authUser = JSON.parse(userRaw);
+          if (authUser.role === 'partner' && (!parsed.id || parsed.id === authUser.id)) {
+            return { ...parsed, ...authUser };
+          }
+        }
+      } catch {
+        // ignore
+      }
+      return parsed;
+    }
   } catch {
     // fallback
   }
+
+  try {
+    const userRaw = localStorage.getItem('fixit_user');
+    if (userRaw) {
+      const authUser = JSON.parse(userRaw);
+      if (authUser.role === 'partner') return authUser;
+    }
+  } catch {
+    // fallback
+  }
+
   return mockPartners[0]; // Default to Rajesh Kumar (Verified Master Plumber)
 }
 
@@ -97,6 +106,19 @@ export function setActivePartner(partner) {
     localStorage.removeItem(PARTNER_STORAGE_KEY);
   } else {
     localStorage.setItem(PARTNER_STORAGE_KEY, JSON.stringify(partner));
+    try {
+      const userRaw = localStorage.getItem('fixit_user');
+      if (userRaw) {
+        const authUser = JSON.parse(userRaw);
+        if (authUser.role === 'partner' && (!partner.id || authUser.id === partner.id)) {
+          const merged = { ...authUser, ...partner };
+          localStorage.setItem('fixit_user', JSON.stringify(merged));
+          localStorage.setItem('fixit_partner_user', JSON.stringify(merged));
+        }
+      }
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -105,9 +127,9 @@ export function setActivePartner(partner) {
  * - 'verified': Rajesh Kumar (Verified KYC, Active Subscription, Master Plumber)
  * - 'pending_kyc': Sunil Mistry (Pending KYC, Carpentry)
  * - 'rejected_kyc': Vikram Joshi (Rejected KYC with reason, Appliance)
- * - 'warning_plan': Kiran Patel (Plan expiring in 2 days, Warning Alert, AC Tech)
+ * - 'warning_plan': Ramesh Sharma (Plan expiring in 2 days, Warning Alert, Electrician)
  * - 'expired_plan': Dinesh Nair (Plan expired, Lockout Screen, Masonry)
- * - 'new_partner': Fresh registered partner needing plan selection & KYC
+ * - 'new_partner': Mohan Sharma (Fresh registered partner needing plan selection & KYC)
  */
 export async function switchDemoPartnerAccount(type) {
   await new Promise((resolve) => setTimeout(resolve, 150));
@@ -115,22 +137,39 @@ export async function switchDemoPartnerAccount(type) {
   let partner;
   if (type === 'pending_kyc') {
     partner = mockPartners.find((p) => p.id === 103) || mockPartners[2];
+    partner = { ...partner, kyc_status: 'pending', rejection_reason: null };
   } else if (type === 'rejected_kyc') {
     partner = mockPartners.find((p) => p.id === 104) || mockPartners[3];
+    partner = {
+      ...partner,
+      kyc_status: 'rejected',
+      rejection_reason:
+        'Trade qualification certificate illegible. Please upload a clear color PDF scan of your certification.',
+    };
   } else if (type === 'warning_plan') {
-    partner = mockPartners.find((p) => p.id === 105) || mockPartners[4];
+    partner = mockPartners.find((p) => p.id === 105) || mockPartners[1];
+    partner = { ...partner, kyc_status: 'verified' };
   } else if (type === 'expired_plan') {
-    partner = mockPartners.find((p) => p.id === 106) || mockPartners[5];
+    partner = mockPartners.find((p) => p.id === 106) || {
+      id: 106,
+      name: 'Dinesh Nair',
+      email: 'dinesh.mason@fixitnow.local',
+      service_name: 'Masonry & Tiling',
+      kyc_status: 'verified',
+      online: false,
+      total_jobs: 38,
+      rating: 4.8,
+    };
   } else if (type === 'new_partner') {
     partner = {
-      id: 999,
+      id: 'new_partner_demo',
       name: 'Mohan Sharma',
-      email: 'mohan.sharma@example.com',
+      email: 'naveen.lock@fixitnow.local',
       phone: '+91 98111 22334',
       service_id: 1,
-      service_name: 'Electrical Work',
+      service_name: 'Electrician',
       online: false,
-      kyc_status: 'pending',
+      kyc_status: 'not_submitted',
       subscription_status: 'unsubscribed',
       rating: 5.0,
       total_jobs: 0,
@@ -153,16 +192,35 @@ export async function switchDemoPartnerAccount(type) {
  * Only KYC-verified & unexpired partners may go online (FR-M3)
  */
 export async function togglePartnerOnline(_partnerId) {
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  try {
+    const res = await put('/api/partner/online');
+    if (res && res.status === 'success') {
+      const current = getActivePartner();
+      const updated = {
+        ...current,
+        ...(res.partner || {}),
+        online: res.online,
+      };
+      setActivePartner(updated);
+      return updated;
+    }
+  } catch (err) {
+    // If the server explicitly rejected with 403 or validation error, rethrow error
+    if (err.message && (err.message.includes('KYC') || err.message.includes('subscription') || err.message.includes('Required role'))) {
+      throw err;
+    }
+    console.warn('[PartnerService] togglePartnerOnline backend request failed, using local check:', err.message);
+  }
+
   const current = getActivePartner();
 
   if (current.kyc_status !== 'verified') {
-    throw new Error('KYC verification is required before you can go online to receive requests.');
+    throw new Error('KYC verification is required before you can go online to receive requests (SRS FR-P7, FR-M3).');
   }
 
   const sub = await getPartnerSubscription(current.id);
-  if (sub && sub.status === 'expired') {
-    throw new Error('Your subscription has expired. Please renew your plan to go online.');
+  if (!sub || sub.status === 'expired' || sub.days_remaining <= 0) {
+    throw new Error('Your subscription has expired. Please renew your plan to go online (SRS FR-P3).');
   }
 
   const updated = {
@@ -175,26 +233,55 @@ export async function togglePartnerOnline(_partnerId) {
 }
 
 /* ========================================================================== */
-/* 2. DASHBOARD DATA                                                          */
+/* 2. DASHBOARD DATA (SRS Section 3.3, FR-P7)                                 */
 /* ========================================================================== */
 
-export async function getPartnerDashboardData(_partnerId) {
-  await new Promise((resolve) => setTimeout(resolve, 200));
+export async function getPartnerDashboardData(partnerId) {
+  try {
+    const res = await get('/api/partner/dashboard');
+    if (res && res.status === 'success' && res.data) {
+      const activeJob = getActiveJob();
+      const currentPartner = getActivePartner();
+      const earnings = getStoredEarnings(partnerId || currentPartner?.id);
+
+      if (res.data.partner) {
+        const merged = { ...currentPartner, ...res.data.partner };
+        setActivePartner(merged);
+      }
+
+      return {
+        ...res.data,
+        active_job: activeJob,
+        today_jobs: earnings.today_jobs ?? res.data.stats?.today_jobs ?? 0,
+        today_earnings: earnings.today_earnings ?? res.data.stats?.today_earnings ?? 0.0,
+      };
+    }
+  } catch (err) {
+    console.warn('[PartnerService] getPartnerDashboardData from backend failed, using local session:', err.message);
+  }
+
   const partner = getActivePartner();
-  const subscription = await getPartnerSubscription(partner.id);
-  const kyc = await getPartnerKyc(partner.id);
-  const earnings = getStoredEarnings();
+  const subscription = await getPartnerSubscription(partner?.id);
+  const kyc = await getPartnerKyc(partner?.id);
+  const earnings = getStoredEarnings(partner?.id);
   const activeJob = getActiveJob();
+
+  const isSubscribed = Boolean(subscription && subscription.status === 'active' && subscription.days_remaining > 0);
+  const isLocked = !isSubscribed;
+  const isExpiringSoon = Boolean(subscription && subscription.is_expiring_soon);
 
   return {
     partner,
     subscription,
     kyc,
-    today_jobs: earnings.today_jobs || 2,
-    today_earnings: earnings.today_earnings || 950.0,
-    total_jobs: partner.total_jobs || 142,
-    rating: partner.rating || 4.9,
+    today_jobs: earnings.today_jobs ?? 0,
+    today_earnings: earnings.today_earnings ?? 0.0,
+    total_jobs: partner?.total_jobs ?? earnings.total_jobs ?? 0,
+    rating: partner?.rating || 4.9,
     active_job: activeJob,
+    is_subscribed: isSubscribed,
+    is_locked: isLocked,
+    warning_expiry: isExpiringSoon,
   };
 }
 
@@ -202,16 +289,72 @@ export async function getPartnerDashboardData(_partnerId) {
 /* 3. SUBSCRIPTION & PLAN MANAGEMENT (SRS FR-P2, FR-P13, FR-P14, FR-P15)       */
 /* ========================================================================== */
 
+/**
+ * Fetch available subscription plans from PostgreSQL
+ * (Quarterly, Half-yearly, Yearly - longer = cheaper per month)
+ */
+export async function getSubscriptionPlans() {
+  try {
+    const res = await get('/api/partner/plans');
+    if (res && res.data && Array.isArray(res.data)) {
+      return res.data;
+    }
+  } catch (err) {
+    console.warn('[PartnerService] getSubscriptionPlans failed, trying fallback:', err.message);
+    try {
+      const fallback = await get('/api/plans');
+      if (fallback && fallback.data && Array.isArray(fallback.data)) {
+        return fallback.data;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Fallback plans if server is temporarily unreachable
+  return [
+    { id: 1, name: 'quarterly', duration_months: 3, price: 899.0, monthly_equivalent: 300, active: true },
+    { id: 2, name: 'half-yearly', duration_months: 6, price: 1599.0, monthly_equivalent: 266, active: true },
+    { id: 3, name: 'yearly', duration_months: 12, price: 2799.0, monthly_equivalent: 233, active: true },
+  ];
+}
+
+/**
+ * Fetch current partner subscription status
+ */
 export async function getPartnerSubscription(partnerId) {
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  const subs = getStoredSubscriptions();
-  const found = subs.find((s) => s.partner_id === Number(partnerId));
+  try {
+    const res = await get('/api/partner/subscription');
+    if (res && res.status === 'success') {
+      return res.data;
+    }
+  } catch (err) {
+    console.warn('[PartnerService] getPartnerSubscription failed:', err.message);
+  }
 
-  if (found) return found;
+  // Fallback demo subscription for unauthenticated demo switcher
+  const current = getActivePartner();
+  if (current?.email === 'dinesh.mason@fixitnow.local') {
+    return {
+      partner_id: partnerId,
+      plan_id: 1,
+      plan_name: 'Quarterly',
+      duration_months: 3,
+      price_paid: 899.0,
+      start_date: '2026-07-10T00:00:00Z',
+      end_date: '2026-10-10T23:59:59Z',
+      days_remaining: 0,
+      status: 'expired',
+      is_expiring_soon: false,
+    };
+  }
 
-  // Fallback default subscription
+  if (current?.email === 'naveen.lock@fixitnow.local' || current?.id === 'new_partner_demo') {
+    return null; // Unsubscribed
+  }
+
   return {
-    partner_id: Number(partnerId),
+    partner_id: Number(partnerId) || 101,
     plan_id: 2,
     plan_name: 'Half-yearly',
     duration_months: 6,
@@ -220,27 +363,41 @@ export async function getPartnerSubscription(partnerId) {
     end_date: '2027-02-01T23:59:59Z',
     days_remaining: 108,
     status: 'active',
+    is_expiring_soon: false,
   };
-}
-
-export async function getSubscriptionPlans() {
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  return mockPlans;
 }
 
 /**
  * Select or Renew a Plan (Simulated payment, SRS FR-P2, FR-P14)
+ * Stores start and end dates and the exact price paid at that time
  */
 export async function selectOrRenewPlan(partnerId, planId) {
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  const plan = mockPlans.find((p) => p.id === Number(planId)) || mockPlans[0];
+  try {
+    const res = await post('/api/partner/subscribe', { plan_id: Number(planId) });
+    if (res && res.data) {
+      const newSub = res.data;
+      const current = getActivePartner();
+      if (current) {
+        setActivePartner({
+          ...current,
+          subscription_status: 'active',
+        });
+      }
+      return newSub;
+    }
+  } catch (err) {
+    console.warn('[PartnerService] Backend subscription failed, using local simulation:', err.message);
+  }
 
+  // Local fallback simulation if offline
+  const plans = await getSubscriptionPlans();
+  const plan = plans.find((p) => p.id === Number(planId)) || plans[0];
   const now = new Date();
   const endDate = new Date(now);
   endDate.setMonth(endDate.getMonth() + plan.duration_months);
 
   const newSub = {
-    partner_id: Number(partnerId),
+    partner_id: partnerId,
     plan_id: plan.id,
     plan_name: plan.name,
     duration_months: plan.duration_months,
@@ -249,20 +406,15 @@ export async function selectOrRenewPlan(partnerId, planId) {
     end_date: endDate.toISOString(),
     days_remaining: plan.duration_months * 30,
     status: 'active',
+    is_expiring_soon: false,
   };
 
-  const subs = getStoredSubscriptions().filter((s) => s.partner_id !== Number(partnerId));
-  const updatedSubs = [newSub, ...subs];
-  saveStoredSubscriptions(updatedSubs);
-
-  // Update active partner session status
   const current = getActivePartner();
-  if (current.id === Number(partnerId)) {
-    const updatedPartner = {
+  if (current) {
+    setActivePartner({
       ...current,
       subscription_status: 'active',
-    };
-    setActivePartner(updatedPartner);
+    });
   }
 
   return newSub;
@@ -272,67 +424,102 @@ export async function selectOrRenewPlan(partnerId, planId) {
 /* 4. KYC VERIFICATION (SRS FR-P4, FR-P5, FR-P7)                              */
 /* ========================================================================== */
 
+/**
+ * Get current partner KYC status and uploaded documents
+ */
 export async function getPartnerKyc(partnerId) {
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  const list = getStoredKycList();
-  const found = list.find((k) => k.partner_id === Number(partnerId));
-
-  if (found) return found;
+  try {
+    const res = await get('/api/partner/kyc');
+    if (res && res.status === 'success' && res.data) {
+      const current = getActivePartner();
+      if (current && res.data.status && current.kyc_status !== res.data.status) {
+        setActivePartner({
+          ...current,
+          kyc_status: res.data.status,
+          rejection_reason: res.data.rejection_reason || null,
+        });
+      }
+      return res.data;
+    }
+  } catch (err) {
+    console.warn('[PartnerService] getPartnerKyc failed:', err.message);
+  }
 
   const current = getActivePartner();
+  const isSubmitted = current?.kyc_status && current.kyc_status !== 'not_submitted';
   return {
-    partner_id: Number(partnerId),
+    partner_id: partnerId,
     govt_id_type: 'Aadhaar Card',
-    id_number: '•••• •••• 1024',
-    status: current.kyc_status || 'pending',
-    rejection_reason: current.rejection_reason || null,
+    id_number: isSubmitted ? '•••• •••• 1024' : '',
+    status: current?.kyc_status || 'not_submitted',
+    rejection_reason: current?.rejection_reason || null,
     submitted_at: new Date().toISOString(),
-    document_name: 'Government_Photo_ID.pdf',
-    photo_name: 'partner_passport_photo.png',
-    trade_cert_name: 'Trade_Qualification_Cert.pdf',
+    documents: [],
   };
 }
 
 /**
- * Submit KYC documents (SRS FR-P4)
+ * Submit KYC documents & passport photo (SRS FR-P4)
+ * Uses Multer multipart/form-data upload
  */
-export async function submitPartnerKyc(partnerId, { govt_id_type, id_number, document_name, photo_name, trade_cert_name }) {
-  await new Promise((resolve) => setTimeout(resolve, 450));
-
-  if (!govt_id_type || !id_number) {
-    throw new Error('Government ID type and ID number are required.');
+export async function submitPartnerKyc(partnerId, payload) {
+  let formData;
+  if (payload instanceof FormData) {
+    formData = payload;
+  } else {
+    formData = new FormData();
+    if (payload.govt_id_type) formData.append('govt_id_type', payload.govt_id_type);
+    if (payload.id_number) formData.append('id_number', payload.id_number);
+    if (payload.documentFile) formData.append('document', payload.documentFile);
+    if (payload.photoFile) formData.append('photo', payload.photoFile);
+    if (payload.tradeCertFile) formData.append('trade_cert', payload.tradeCertFile);
   }
 
-  const newKyc = {
-    id: Date.now(),
-    partner_id: Number(partnerId),
-    govt_id_type,
-    id_number: id_number.trim(),
-    status: 'pending', // Pending Admin review per FR-P5
-    submitted_at: new Date().toISOString(),
-    reviewer_decision: null,
-    rejection_reason: null,
-    document_name: document_name || 'Government_ID_Scan.pdf',
-    photo_name: photo_name || 'passport_photo.jpg',
-    trade_cert_name: trade_cert_name || 'Trade_License_Certificate.pdf',
-  };
+  try {
+    const res = await postFormData('/api/partner/kyc', formData);
+    if (res && res.status === 'success') {
+      const current = getActivePartner();
+      if (current) {
+        setActivePartner({
+          ...current,
+          kyc_status: 'pending',
+          rejection_reason: null,
+        });
+      }
+      return {
+        status: 'pending',
+        partner_id: partnerId,
+        govt_id_type: payload.govt_id_type || 'Aadhaar Card',
+        id_number: payload.id_number || '',
+        submitted_at: new Date().toISOString(),
+        ...res.data,
+      };
+    }
+  } catch (err) {
+    console.warn('[PartnerService] Backend KYC upload failed, falling back to local simulation:', err.message);
+    throw err;
+  }
 
-  const list = getStoredKycList().filter((k) => k.partner_id !== Number(partnerId));
-  const updatedList = [newKyc, ...list];
-  saveStoredKycList(updatedList);
-
-  // Update current partner's kyc_status
+  // Local fallback
   const current = getActivePartner();
-  if (current.id === Number(partnerId)) {
-    const updatedPartner = {
+  if (current) {
+    setActivePartner({
       ...current,
       kyc_status: 'pending',
       rejection_reason: null,
-    };
-    setActivePartner(updatedPartner);
+    });
   }
 
-  return newKyc;
+  return {
+    partner_id: partnerId,
+    govt_id_type: payload.govt_id_type || 'Aadhaar Card',
+    id_number: payload.id_number || '',
+    status: 'pending',
+    submitted_at: new Date().toISOString(),
+    document_name: payload.documentFile?.name || 'Identity_Document.pdf',
+    photo_name: payload.photoFile?.name || 'passport_photo.jpg',
+    trade_cert_name: payload.tradeCertFile?.name || 'Trade_Certificate.pdf',
+  };
 }
 
 /**
@@ -340,6 +527,41 @@ export async function submitPartnerKyc(partnerId, { govt_id_type, id_number, doc
  */
 export async function resubmitPartnerKyc(partnerId, kycPayload) {
   return submitPartnerKyc(partnerId, kycPayload);
+}
+
+/**
+ * Review Partner KYC decision (Admin decision / testing helper)
+ */
+export async function reviewPartnerKyc(partnerId, decision, rejection_reason = null) {
+  try {
+    const res = await put(`/api/partner/kyc/${partnerId}/decision`, {
+      decision,
+      rejection_reason,
+    });
+    if (res && res.status === 'success') {
+      const current = getActivePartner();
+      if (current) {
+        setActivePartner({
+          ...current,
+          kyc_status: decision,
+          rejection_reason: decision === 'rejected' ? rejection_reason : null,
+        });
+      }
+      return res.data;
+    }
+  } catch (err) {
+    console.warn('[PartnerService] reviewPartnerKyc error:', err.message);
+  }
+
+  const current = getActivePartner();
+  if (current) {
+    setActivePartner({
+      ...current,
+      kyc_status: decision,
+      rejection_reason: decision === 'rejected' ? rejection_reason : null,
+    });
+  }
+  return { partner_id: partnerId, kyc_status: decision, rejection_reason };
 }
 
 /* ========================================================================== */
@@ -365,12 +587,6 @@ export function setActiveJob(job) {
 
 /**
  * Advance Active Job to next step (single primary next-action button)
- * Order:
- * 1. 'accepted' -> 'on_the_way' (Start trip)
- * 2. 'on_the_way' -> 'arrived' (Arrived)
- * 3. 'arrived' -> 'in_progress' (Confirm Service OTP)
- * 4. 'in_progress' -> 'completed' (Complete service)
- * 5. 'completed' -> 'paid' (Payment received, records earnings & clears active job)
  */
 export async function advanceJobStep(jobId, currentStep, enteredOtp = null) {
   await new Promise((resolve) => setTimeout(resolve, 300));
@@ -433,7 +649,8 @@ export async function advanceJobStep(jobId, currentStep, enteredOtp = null) {
   if (currentStep === 'completed') {
     // Stage 5: Payment received - confirm direct on-site settlement (SRS FR-P12, BR-7)
     const settlementAmount = job.amount || 450.0;
-    const earnings = getStoredEarnings();
+    const currentPartner = getActivePartner();
+    const earnings = getStoredEarnings(currentPartner?.id);
     const newEntry = {
       id: Date.now(),
       order_number: job.order_number || `ORD-${job.id}`,
@@ -448,13 +665,15 @@ export async function advanceJobStep(jobId, currentStep, enteredOtp = null) {
 
     const updatedEarnings = {
       ...earnings,
-      total_earnings: (earnings.total_earnings || 28450) + settlementAmount,
-      total_jobs: (earnings.total_jobs || 142) + 1,
-      today_earnings: (earnings.today_earnings || 950) + settlementAmount,
-      today_jobs: (earnings.today_jobs || 2) + 1,
+      total_earnings: (earnings.total_earnings || 0) + settlementAmount,
+      total_jobs: (earnings.total_jobs || 0) + 1,
+      today_earnings: (earnings.today_earnings || 0) + settlementAmount,
+      today_jobs: (earnings.today_jobs || 0) + 1,
+      this_week_earnings: (earnings.this_week_earnings || 0) + settlementAmount,
+      this_month_earnings: (earnings.this_month_earnings || 0) + settlementAmount,
       ledger: [newEntry, ...(earnings.ledger || [])],
     };
-    saveStoredEarnings(updatedEarnings);
+    saveStoredEarnings(updatedEarnings, currentPartner?.id);
 
     // Clear active job
     setActiveJob(null);
@@ -523,9 +742,9 @@ export async function simulateCustomerCancel(jobId, reason = 'Customer cancelled
 /* 6. EARNINGS & RATINGS (SRS FR-P11, FR-P12, BR-7)                           */
 /* ========================================================================== */
 
-export async function getPartnerEarnings(_partnerId) {
+export async function getPartnerEarnings(partnerId) {
   await new Promise((resolve) => setTimeout(resolve, 150));
-  return getStoredEarnings();
+  return getStoredEarnings(partnerId);
 }
 
 export async function getPartnerRatings(_partnerId) {
@@ -540,7 +759,6 @@ export async function getPartnerRatings(_partnerId) {
 export async function getPartnerHistory(partnerId, filter = 'ALL') {
   await new Promise((resolve) => setTimeout(resolve, 200));
 
-  // Base list of completed/cancelled jobs
   const list = [
     {
       id: 427,
@@ -662,3 +880,31 @@ export async function getPartnerById(partnerId) {
   const found = mockPartners.find((p) => p.id === Number(partnerId));
   return found || mockPartners[0];
 }
+
+export default {
+  getActivePartner,
+  setActivePartner,
+  switchDemoPartnerAccount,
+  togglePartnerOnline,
+  getPartnerDashboardData,
+  getPartnerSubscription,
+  getSubscriptionPlans,
+  selectOrRenewPlan,
+  getPartnerKyc,
+  submitPartnerKyc,
+  resubmitPartnerKyc,
+  reviewPartnerKyc,
+  getActiveJob,
+  setActiveJob,
+  advanceJobStep,
+  acceptIncomingJob,
+  declineIncomingJob,
+  getMockIncomingJob,
+  simulateCustomerCancel,
+  getPartnerEarnings,
+  getPartnerRatings,
+  getPartnerHistory,
+  updatePartnerProfile,
+  getEligiblePartnerForTrade,
+  getPartnerById,
+};

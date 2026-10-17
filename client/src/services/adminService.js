@@ -7,7 +7,7 @@
  * Strictly enforces FR-A3: No customer or partner modification methods exist here.
  */
 
-import { post } from './api';
+import { get, post, put } from './api';
 import {
   mockAdminAnalytics,
   mockLiveUsers,
@@ -189,12 +189,23 @@ function saveStoredPartners(list) {
 }
 
 export async function getAdminKycList(filter = 'all') {
-  await delay(150);
+  await delay(100);
+
+  let backendList = [];
+  try {
+    const res = await get('/api/admin/kyc');
+    if (res && res.status === 'success' && Array.isArray(res.data)) {
+      backendList = res.data;
+    }
+  } catch (err) {
+    console.warn('[AdminService] getAdminKycList API error, falling back to local storage:', err.message);
+  }
+
   const docs = getStoredKycDocs();
   const partners = getStoredPartners();
 
-  // Combine KYC document data with partner profile
-  const combined = docs.map((doc) => {
+  // Combine KYC document data with partner profile for mock records
+  const mockCombined = docs.map((doc) => {
     const partner = partners.find((p) => p.id === doc.partner_id) || {};
     return {
       ...doc,
@@ -208,6 +219,15 @@ export async function getAdminKycList(filter = 'all') {
       partner_avatar_color: partner.avatar_color || '#111418',
     };
   });
+
+  // Merge backend records with mock records (avoiding duplicates)
+  const combined = [...backendList];
+  const backendPartnerIds = new Set(backendList.map((b) => String(b.partner_id)));
+  for (const m of mockCombined) {
+    if (!backendPartnerIds.has(String(m.partner_id))) {
+      combined.push(m);
+    }
+  }
 
   if (filter === 'pending') {
     return combined.filter((k) => k.status === 'pending');
@@ -224,7 +244,7 @@ export async function getAdminKycList(filter = 'all') {
 export async function getPartnerKycDossier(partnerId) {
   await delay(100);
   const list = await getAdminKycList('all');
-  const dossier = list.find((k) => k.partner_id === Number(partnerId));
+  const dossier = list.find((k) => String(k.partner_id) === String(partnerId));
   if (!dossier) {
     throw new Error(`No KYC dossier found for Partner #${partnerId}`);
   }
@@ -235,103 +255,164 @@ export async function getPartnerKycDossier(partnerId) {
  * Approve partner KYC (instantly unlocks eligibility per BR-5)
  */
 export async function approvePartnerKyc(partnerId, approvalNote = '') {
-  await delay(250);
+  await delay(150);
+
+  try {
+    const res = await put(`/api/partner/kyc/${partnerId}/decision`, {
+      decision: 'verified',
+      reviewer_notes: approvalNote,
+    });
+    if (res && res.status === 'success') {
+      // API call succeeded
+    }
+  } catch (err) {
+    console.warn('[AdminService] approvePartnerKyc API failed:', err.message);
+  }
+
   const numId = Number(partnerId);
   const docs = getStoredKycDocs();
   const partners = getStoredPartners();
 
   const docIndex = docs.findIndex((d) => d.partner_id === numId);
-  if (docIndex === -1) {
-    throw new Error(`KYC record not found for Partner #${partnerId}`);
+  if (docIndex !== -1) {
+    const nowIso = new Date().toISOString();
+    docs[docIndex] = {
+      ...docs[docIndex],
+      status: 'verified',
+      verified_at: nowIso,
+      reviewer_decision: approvalNote?.trim()
+        ? `Approved: ${approvalNote.trim()}`
+        : 'Approved: Government ID and trade qualification verified by Admin.',
+    };
+    saveStoredKycDocs(docs);
+
+    const partnerIndex = partners.findIndex((p) => p.id === numId);
+    if (partnerIndex !== -1) {
+      partners[partnerIndex] = {
+        ...partners[partnerIndex],
+        kyc_status: 'verified',
+        rejection_reason: null,
+      };
+      saveStoredPartners(partners);
+    }
   }
 
-  const nowIso = new Date().toISOString();
-  docs[docIndex] = {
-    ...docs[docIndex],
-    status: 'verified',
-    verified_at: nowIso,
-    reviewer_decision: approvalNote?.trim()
-      ? `Approved: ${approvalNote.trim()}`
-      : 'Approved: Government ID and trade qualification verified by Admin.',
-  };
-  saveStoredKycDocs(docs);
-
-  // Update partner kyc_status
-  const partnerIndex = partners.findIndex((p) => p.id === numId);
-  if (partnerIndex !== -1) {
-    partners[partnerIndex] = {
-      ...partners[partnerIndex],
-      kyc_status: 'verified',
-      rejection_reason: null,
-    };
-    saveStoredPartners(partners);
+  // Also update active partner session in localStorage if current partner matches
+  try {
+    const raw = localStorage.getItem('fixit_current_partner');
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (String(p.id) === String(partnerId)) {
+        const updated = { ...p, kyc_status: 'verified', rejection_reason: null };
+        localStorage.setItem('fixit_current_partner', JSON.stringify(updated));
+        const userRaw = localStorage.getItem('fixit_user');
+        if (userRaw) {
+          const u = JSON.parse(userRaw);
+          if (String(u.id) === String(partnerId)) {
+            localStorage.setItem('fixit_user', JSON.stringify({ ...u, kyc_status: 'verified', rejection_reason: null }));
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore
   }
 
   // Audit activity log
   await recordActivity({
     actor: 'admin@fixitnow.local',
     action: 'KYC_APPROVED',
-    target: `Partner #${numId} (${partners[partnerIndex]?.name || 'Partner'})`,
-    details: docs[docIndex].reviewer_decision,
+    target: `Partner #${partnerId}`,
+    details: approvalNote || 'Approved by Admin',
     category: 'KYC',
     status: 'success',
   });
 
-  return docs[docIndex];
+  return { partner_id: partnerId, status: 'verified' };
 }
 
 /**
  * Reject partner KYC (FR-A4: rejection reason is mandatory)
  */
 export async function rejectPartnerKyc(partnerId, rejectionReason) {
-  await delay(250);
-  const numId = Number(partnerId);
+  await delay(150);
   const cleanReason = rejectionReason?.trim();
 
   if (!cleanReason) {
     throw new Error('A detailed rejection reason is mandatory before declining a KYC dossier.');
   }
 
+  try {
+    const res = await put(`/api/partner/kyc/${partnerId}/decision`, {
+      decision: 'rejected',
+      rejection_reason: cleanReason,
+    });
+    if (res && res.status === 'success') {
+      // API call succeeded
+    }
+  } catch (err) {
+    console.warn('[AdminService] rejectPartnerKyc API failed:', err.message);
+  }
+
+  const numId = Number(partnerId);
   const docs = getStoredKycDocs();
   const partners = getStoredPartners();
 
   const docIndex = docs.findIndex((d) => d.partner_id === numId);
-  if (docIndex === -1) {
-    throw new Error(`KYC record not found for Partner #${partnerId}`);
+  if (docIndex !== -1) {
+    const nowIso = new Date().toISOString();
+    docs[docIndex] = {
+      ...docs[docIndex],
+      status: 'rejected',
+      rejection_reason: cleanReason,
+      reviewer_decision: `Rejected: ${cleanReason}`,
+      rejected_at: nowIso,
+    };
+    saveStoredKycDocs(docs);
+
+    const partnerIndex = partners.findIndex((p) => p.id === numId);
+    if (partnerIndex !== -1) {
+      partners[partnerIndex] = {
+        ...partners[partnerIndex],
+        kyc_status: 'rejected',
+        rejection_reason: cleanReason,
+      };
+      saveStoredPartners(partners);
+    }
   }
 
-  const nowIso = new Date().toISOString();
-  docs[docIndex] = {
-    ...docs[docIndex],
-    status: 'rejected',
-    rejection_reason: cleanReason,
-    reviewer_decision: `Rejected: ${cleanReason}`,
-    rejected_at: nowIso,
-  };
-  saveStoredKycDocs(docs);
-
-  // Update partner kyc_status
-  const partnerIndex = partners.findIndex((p) => p.id === numId);
-  if (partnerIndex !== -1) {
-    partners[partnerIndex] = {
-      ...partners[partnerIndex],
-      kyc_status: 'rejected',
-      rejection_reason: cleanReason,
-    };
-    saveStoredPartners(partners);
+  // Also update active partner session in localStorage if current partner matches
+  try {
+    const raw = localStorage.getItem('fixit_current_partner');
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (String(p.id) === String(partnerId)) {
+        const updated = { ...p, kyc_status: 'rejected', rejection_reason: cleanReason };
+        localStorage.setItem('fixit_current_partner', JSON.stringify(updated));
+        const userRaw = localStorage.getItem('fixit_user');
+        if (userRaw) {
+          const u = JSON.parse(userRaw);
+          if (String(u.id) === String(partnerId)) {
+            localStorage.setItem('fixit_user', JSON.stringify({ ...u, kyc_status: 'rejected', rejection_reason: cleanReason }));
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore
   }
 
   // Audit activity log
   await recordActivity({
     actor: 'admin@fixitnow.local',
     action: 'KYC_REJECTED',
-    target: `Partner #${numId} (${partners[partnerIndex]?.name || 'Partner'})`,
+    target: `Partner #${partnerId}`,
     details: `Reason: ${cleanReason}`,
     category: 'KYC',
     status: 'error',
   });
 
-  return docs[docIndex];
+  return { partner_id: partnerId, status: 'rejected', rejection_reason: cleanReason };
 }
 
 /**

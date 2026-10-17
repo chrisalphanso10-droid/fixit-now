@@ -214,23 +214,23 @@ export default function PlanSelectionView({
               </div>
 
               <div className="p-4 bg-concrete border border-ink space-y-2">
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center gap-2 flex-wrap">
                   <span className="text-muted">PARTNER:</span>
                   <span className="font-bold text-ink">{partner?.name || 'Registered Partner'}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center gap-2 flex-wrap">
                   <span className="text-muted">SERVICE CATEGORY:</span>
                   <span className="font-bold text-ink">{partner?.service_name || 'Certified Trade'}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center gap-2 flex-wrap">
                   <span className="text-muted">DURATION:</span>
                   <span className="font-bold text-ink">{receiptModal.duration_months} Months ({receiptModal.days_remaining} Days)</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center gap-2 flex-wrap">
                   <span className="text-muted">COMMISSION RATE:</span>
                   <span className="font-bold text-done">0.00% (Guaranteed)</span>
                 </div>
-                <div className="border-t border-ink/20 pt-2 flex justify-between text-sm font-bold">
+                <div className="border-t border-ink/20 pt-2 flex justify-between items-center gap-2 flex-wrap text-sm font-bold">
                   <span>AMOUNT PAID:</span>
                   <span className="text-signal">₹{receiptModal.price_paid.toFixed(2)}</span>
                 </div>

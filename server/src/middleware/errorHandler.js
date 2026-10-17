@@ -58,6 +58,22 @@ export function errorHandler(err, req, res, _next) {
     }
   }
 
+  // Multer File Upload Error Handling
+  if (err.name === 'MulterError') {
+    status = 400;
+    errorName = 'UploadValidationError';
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      message = 'Uploaded file exceeds the maximum permitted file size limit.';
+    } else if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+      message = `Unexpected upload field "${err.field}".`;
+    } else {
+      message = err.message;
+    }
+  } else if (err.message && (err.message.includes('(SRS FR-P4)') || err.message.includes('Upload PDF or JPEG/PNG only'))) {
+    status = 400;
+    errorName = 'UploadValidationError';
+  }
+
   const response = {
     error: errorName,
     message,

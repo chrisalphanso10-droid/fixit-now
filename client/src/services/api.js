@@ -112,8 +112,43 @@ export async function put(endpoint, data = {}) {
   return response.json();
 }
 
+/**
+ * Perform a POST request with multipart/form-data (for file uploads)
+ * @param {string} endpoint
+ * @param {FormData} formData
+ * @returns {Promise<any>}
+ */
+export async function postFormData(endpoint, formData) {
+  const primaryUrl = API_BASE_URL ? `${API_BASE_URL}${endpoint}` : endpoint;
+
+  const headers = {};
+  try {
+    const token = localStorage.getItem('fixit_token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  } catch {
+    // ignore
+  }
+
+  const response = await fetch(primaryUrl, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(errorBody.message || `HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
 export default {
   get,
   post,
   put,
+  postFormData,
 };
+

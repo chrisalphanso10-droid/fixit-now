@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS partners (
     online BOOLEAN DEFAULT FALSE,
     latitude DOUBLE PRECISION,
     longitude DOUBLE PRECISION,
-    kyc_status VARCHAR(20) DEFAULT 'pending' CHECK (kyc_status IN ('pending', 'verified', 'rejected')),
+    kyc_status VARCHAR(20) DEFAULT 'not_submitted' CHECK (kyc_status IN ('not_submitted', 'pending', 'verified', 'rejected')),
     rejection_reason TEXT,
     rating NUMERIC(3, 2) DEFAULT 5.00,
     total_jobs INTEGER DEFAULT 0,
@@ -95,9 +95,12 @@ CREATE TABLE IF NOT EXISTS partners (
 CREATE TABLE IF NOT EXISTS kyc_documents (
     id SERIAL PRIMARY KEY,
     partner_id UUID NOT NULL REFERENCES partners(id) ON DELETE CASCADE,
-    document_type VARCHAR(50) NOT NULL, -- e.g. 'aadhaar', 'id_card', 'license', 'photo'
+    document_type VARCHAR(50) NOT NULL, -- e.g. 'document', 'photo', 'trade_cert', 'aadhaar', 'id_card', 'license'
     file_path TEXT NOT NULL,
-    file_type VARCHAR(30) NOT NULL,
+    file_name VARCHAR(255),
+    original_name VARCHAR(255),
+    file_type VARCHAR(50) NOT NULL,
+    file_size INTEGER,
     status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'verified', 'rejected')),
     reviewer_notes TEXT,
     reviewed_at TIMESTAMP WITH TIME ZONE,

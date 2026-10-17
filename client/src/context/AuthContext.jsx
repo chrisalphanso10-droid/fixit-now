@@ -135,6 +135,10 @@ export function AuthProvider({ children }) {
           setRole(response.user.role);
           localStorage.setItem(USER_KEY, JSON.stringify(response.user));
           localStorage.setItem(ROLE_KEY, response.user.role);
+          if (response.user.role === 'partner') {
+            localStorage.setItem('fixit_partner_user', JSON.stringify(response.user));
+            localStorage.setItem('fixit_current_partner', JSON.stringify(response.user));
+          }
         }
       } catch (err) {
         console.warn('[Session Verification Failed]:', err.message);

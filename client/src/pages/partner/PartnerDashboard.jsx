@@ -2,7 +2,8 @@
  * FixIt Now - Partner Dashboard Screen
  * Dual Modes: Verified Version (Live Dispatch Radar, Proximity Radius, Stats, Test Triggers)
  * vs Not-Verified Version (KYC Verification Warning Banner, Onboarding Checklist, Locked Radar).
- * Conforms to docs/DESIGN.md and SRS Section 3.3, FR-P7, FR-P8.
+ * Handles Subscription Expiry Lockout & Warning Banners.
+ * Conforms to docs/DESIGN.md and SRS Section 3.3, FR-P2, FR-P3, FR-P7, FR-P8, FR-P13..FR-P15.
  */
 
 import { useState } from 'react';
@@ -19,17 +20,54 @@ export default function PartnerDashboard({
 }) {
   const [radarZoom, setRadarZoom] = useState('2.0'); // 2.0 km standard radius per SRS FR-P8
 
-  const isKycVerified = partner?.kyc_status === 'verified';
-  const isKycRejected = partner?.kyc_status === 'rejected';
-  const daysRemaining = subscription?.days_remaining ?? 108;
-  const isExpired = subscription?.status === 'expired' || daysRemaining <= 0;
+  const kycStatus = partner?.kyc_status || 'not_submitted';
+  const isKycVerified = kycStatus === 'verified';
+  const isKycRejected = kycStatus === 'rejected';
+  const isKycPending = kycStatus === 'pending';
+  const isKycNotSubmitted = kycStatus === 'not_submitted';
 
-  const todayJobs = dashboardData?.today_jobs || 2;
-  const todayEarnings = dashboardData?.today_earnings || 950.0;
-  const rating = partner?.rating || 4.9;
+  const daysRemaining = subscription?.days_remaining ?? 0;
+  const isSubscribed = Boolean(subscription && subscription.status === 'active' && daysRemaining > 0);
+  const isExpired = !isSubscribed;
+  const isExpiringSoon = isSubscribed && daysRemaining <= 7;
+
+  const todayJobs = dashboardData?.today_jobs || 0;
+  const todayEarnings = dashboardData?.today_earnings || 0.0;
+  const rating = partner?.rating || 5.0;
 
   return (
     <div className="space-y-6">
+      {/* ============================================================== */}
+      {/* WARNING BANNER: SUBSCRIPTION CLOSE TO EXPIRY (SRS FR-P15)       */}
+      {/* ============================================================== */}
+      {isExpiringSoon && (
+        <div
+          role="alert"
+          className="border-2 border-signal bg-paper p-4 sm:p-5 shadow-hard flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-ink"
+          style={{ borderRadius: 0 }}
+        >
+          <div className="flex items-start gap-3">
+            <span className="w-3.5 h-3.5 bg-signal shrink-0 mt-1 inline-block animate-pulse" />
+            <div>
+              <div className="font-mono text-xs font-bold uppercase tracking-wider text-signal mb-0.5">
+                ! PLAN EXPIRING SOON: {daysRemaining} DAY{daysRemaining === 1 ? '' : 'S'} REMAINING
+              </div>
+              <p className="font-mono text-xs text-soft leading-relaxed max-w-2xl">
+                Your 0% commission pass ({subscription?.plan_name || 'Current'} Pass) will expire soon. Renew your subscription now to avoid dispatch lockout.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onNavigate('plan-selection')}
+            className="btn-primary min-h-[44px] px-5 font-mono text-xs font-bold uppercase tracking-wider shadow-hard shrink-0"
+          >
+            RENEW PASS NOW →
+          </button>
+        </div>
+      )}
+
       {/* ============================================================== */}
       {/* TOP SUMMARY BANNER                                             */}
       {/* ============================================================== */}
@@ -49,18 +87,20 @@ export default function PartnerDashboard({
               Welcome back, {partner?.name || 'Partner'}
             </h1>
             <div className="font-mono text-xs text-[var(--theme-text-soft)] mt-1">
-              Certified Trade: <strong className="text-[var(--theme-text-main)]">{partner?.service_name || 'Home Repairs'}</strong> · Base: <span className="text-[var(--theme-text-main)]">{partner?.address?.slice(0, 32)}...</span>
+              Certified Trade: <strong className="text-[var(--theme-text-main)]">{partner?.service_name || 'Home Repairs'}</strong> · Base: <span className="text-[var(--theme-text-main)]">{partner?.address ? `${partner.address.slice(0, 32)}...` : 'Bengaluru'}</span>
             </div>
           </div>
 
-          {/* Quick Status Stamp */}
+          {/* Quick Status Stamp (docs/DESIGN.md Section 5) */}
           <div className="flex items-center gap-2 self-start sm:self-auto font-mono text-xs">
             <span
-              className={`border-2 px-3 py-1 font-bold uppercase shadow-hard-sm ${
+              className={`border-2 px-3 py-1 font-bold uppercase shadow-hard-sm inline-block -rotate-3 ${
                 !isKycVerified
                   ? isKycRejected
                     ? 'border-signal bg-paper text-ink'
-                    : 'border-[var(--theme-border)] bg-concrete text-ink'
+                    : isKycPending
+                    ? 'border-ink bg-concrete text-ink'
+                    : 'border-signal bg-paper text-signal'
                   : isExpired
                   ? 'border-ink bg-ink text-paper'
                   : online
@@ -70,10 +110,12 @@ export default function PartnerDashboard({
             >
               {!isKycVerified
                 ? isKycRejected
-                  ? '✕ KYC REJECTED'
-                  : '⏳ KYC PENDING'
+                  ? 'KYC REJECTED'
+                  : isKycPending
+                  ? 'KYC PENDING'
+                  : 'NOT SUBMITTED'
                 : isExpired
-                ? '✕ PLAN EXPIRED'
+                ? 'PLAN EXPIRED'
                 : online
                 ? '● ONLINE · 2 KM'
                 : '○ OFFLINE'}
@@ -114,6 +156,50 @@ export default function PartnerDashboard({
       </div>
 
       {/* ============================================================== */}
+      {/* SUBSCRIPTION LOCKOUT BANNER (SRS FR-P3, FR-P15)                 */}
+      {/* ============================================================== */}
+      {isExpired && (
+        <div
+          role="alert"
+          className="bg-paper border-3 border-ink p-6 sm:p-8 shadow-hard text-ink space-y-4"
+          style={{ borderRadius: 0 }}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-ink pb-3">
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-3.5 bg-signal inline-block" />
+              <h2 className="font-display font-extrabold text-xl sm:text-2xl uppercase tracking-tight">
+                Subscription Pass Expired · Job Features Locked
+              </h2>
+            </div>
+            <span className="border border-ink bg-ink text-paper px-2 py-0.5 font-mono text-[10px] font-bold uppercase self-start sm:self-auto">
+              SRS FR-P3 &amp; FR-P15
+            </span>
+          </div>
+
+          <p className="font-mono text-xs sm:text-sm text-soft leading-relaxed max-w-3xl">
+            Only subscribed partners with an active pass can use FixIt Now job features (radar listening, online toggle, and dispatch matching). Choose a flat-rate quarterly, half-yearly, or yearly pass to unlock dispatches.
+          </p>
+
+          <div className="pt-2 flex flex-col sm:flex-row gap-3">
+            <button
+              type="button"
+              onClick={() => onNavigate('plan-selection')}
+              className="btn-primary min-h-[48px] px-6 font-mono text-xs font-bold uppercase tracking-wider shadow-hard"
+            >
+              RENEW SUBSCRIPTION PASS →
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate('plan')}
+              className="border-2 border-ink bg-concrete min-h-[48px] px-6 font-mono text-xs font-bold uppercase tracking-wider hover:border-signal"
+            >
+              VIEW PLAN DETAILS
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
       {/* VERSION A: NOT-VERIFIED DASHBOARD (KYC Warning & Checklist)    */}
       {/* ============================================================== */}
       {!isKycVerified && (
@@ -133,7 +219,9 @@ export default function PartnerDashboard({
                 <h2 className="font-display font-extrabold text-xl sm:text-2xl uppercase tracking-tight">
                   {isKycRejected
                     ? 'Compliance Alert: KYC Verification Rejected'
-                    : 'Account Verification Pending · Dispatch Radar Locked'}
+                    : isKycPending
+                    ? 'KYC Verification Pending Review'
+                    : 'Complete KYC verification'}
                 </h2>
               </div>
               <span className="border border-current px-2 py-0.5 font-mono text-[10px] font-bold uppercase">
@@ -144,6 +232,8 @@ export default function PartnerDashboard({
             <p className="font-mono text-xs sm:text-sm text-[var(--theme-text-soft)] leading-relaxed">
               {isKycRejected
                 ? `Compliance review detected an issue with your submitted documents: "${partner?.rejection_reason || 'Document scan blurred'}". Please resubmit corrected documents to unlock radar access.`
+                : isKycPending
+                ? 'Your compliance documents have been submitted and are currently queued for administrator review. Dispatch radar will unlock once approved.'
                 : 'Per FixIt Now Trust & Safety rules, partner accounts must complete identity and trade qualification verification before they can toggle online and receive customer dispatches.'}
             </p>
 
@@ -153,7 +243,7 @@ export default function PartnerDashboard({
                 ONBOARDING DISPATCH CHECKLIST:
               </span>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
                   <span className="text-done font-bold">✓</span>
                   <span>1. Partner Account Registration</span>
@@ -161,29 +251,31 @@ export default function PartnerDashboard({
                 <span className="text-done font-bold text-[10px] uppercase">Completed</span>
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <span className="text-done font-bold">✓</span>
+                  <span className={isSubscribed ? 'text-done font-bold' : 'text-signal font-bold'}>
+                    {isSubscribed ? '✓' : '○'}
+                  </span>
                   <span>2. 0% Commission Subscription Plan</span>
                 </div>
-                <span className="text-done font-bold text-[10px] uppercase">
-                  {subscription?.plan_name || 'Half-yearly'} Pass Active
+                <span className={`font-bold text-[10px] uppercase ${isSubscribed ? 'text-done' : 'text-signal'}`}>
+                  {isSubscribed ? `${subscription?.plan_name || 'Active'} Pass Active` : 'Pass Required'}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <span className={isKycRejected ? 'text-signal font-bold' : 'text-signal font-bold'}>
-                    {isKycRejected ? '✕' : '⏳'}
+                  <span className={isKycRejected ? 'text-signal font-bold' : isKycPending ? 'text-ink font-bold' : 'text-signal font-bold'}>
+                    {isKycRejected ? '✕' : isKycPending ? '[-]' : '○'}
                   </span>
-                  <span>3. KYC Document Submission (Govt ID &amp; Trade License)</span>
+                  <span>3. KYC Document Submission (Govt ID &amp; Passport Photo)</span>
                 </div>
-                <span className={`font-bold text-[10px] uppercase ${isKycRejected ? 'text-signal' : 'text-signal'}`}>
-                  {isKycRejected ? 'Correction Required' : 'In Review Desk'}
+                <span className={`font-bold text-[10px] uppercase ${isKycRejected ? 'text-signal' : isKycPending ? 'text-ink' : 'text-signal'}`}>
+                  {isKycRejected ? 'Correction Required' : isKycPending ? 'In Review Desk' : 'Not Submitted'}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
                   <span className="text-[var(--theme-text-muted)] font-bold">○</span>
                   <span>4. Platform Activation &amp; Live Radar Dispatch</span>
@@ -200,7 +292,11 @@ export default function PartnerDashboard({
                 onClick={() => onNavigate('kyc')}
                 className="btn-primary min-h-[48px] px-6 font-mono text-xs font-bold uppercase tracking-wider shadow-hard"
               >
-                {isKycRejected ? 'RESUBMIT CORRECTED KYC DOCUMENTS →' : 'VIEW KYC REVIEW STATUS →'}
+                {isKycRejected
+                  ? 'RESUBMIT CORRECTED KYC DOCUMENTS →'
+                  : isKycPending
+                  ? 'VIEW KYC REVIEW STATUS →'
+                  : 'COMPLETE KYC VERIFICATION →'}
               </button>
             </div>
           </div>
@@ -262,7 +358,9 @@ export default function PartnerDashboard({
                   PROXIMITY DISPATCH RADAR
                 </span>
                 <h2 className="font-display font-extrabold text-xl sm:text-2xl text-[var(--theme-text-main)]">
-                  {online && !isExpired
+                  {isExpired
+                    ? 'Dispatch Radar is Locked (Subscription Required)'
+                    : online
                     ? 'Scanning 2.0 km Zone for Direct Fix Requests'
                     : 'Dispatch Radar is Paused (Offline)'}
                 </h2>
@@ -275,12 +373,12 @@ export default function PartnerDashboard({
                   onClick={onToggleOnline}
                   disabled={isExpired}
                   className={`min-h-[44px] px-4 py-2 border-2 border-[var(--theme-border)] font-mono text-xs font-bold uppercase tracking-wider transition-all ${
-                    online
+                    online && !isExpired
                       ? 'bg-done text-paper shadow-hard hover:opacity-95'
                       : 'bg-[var(--theme-bg)] text-[var(--theme-text-soft)] hover:text-[var(--theme-text-main)]'
                   } ${isExpired ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  {online ? '● RADAR ONLINE' : '○ RADAR OFFLINE'}
+                  {online && !isExpired ? '● RADAR ONLINE' : '○ RADAR OFFLINE'}
                 </button>
               </div>
             </div>
@@ -292,19 +390,19 @@ export default function PartnerDashboard({
                 {/* 2.0 km outer ring */}
                 <div
                   className={`w-64 h-64 sm:w-72 sm:h-72 rounded-full border-2 border-dashed ${
-                    online ? 'border-signal/40' : 'border-[var(--theme-border)]'
+                    online && !isExpired ? 'border-signal/40' : 'border-[var(--theme-border)]'
                   }`}
                 />
                 {/* 1.0 km middle ring */}
                 <div
                   className={`w-44 h-44 sm:w-52 sm:h-52 rounded-full border ${
-                    online ? 'border-signal/30' : 'border-[var(--theme-border)]'
+                    online && !isExpired ? 'border-signal/30' : 'border-[var(--theme-border)]'
                   }`}
                 />
                 {/* 0.5 km inner ring */}
                 <div
                   className={`w-24 h-24 sm:w-28 sm:h-28 rounded-full border ${
-                    online ? 'border-signal/20' : 'border-[var(--theme-border)]'
+                    online && !isExpired ? 'border-signal/20' : 'border-[var(--theme-border)]'
                   }`}
                 />
 
@@ -316,26 +414,30 @@ export default function PartnerDashboard({
                 <div className="relative flex items-center justify-center">
                   <span
                     className={`w-4 h-4 rounded-full ${
-                      online ? 'bg-signal animate-ping' : 'bg-concrete'
+                      online && !isExpired ? 'bg-signal animate-ping' : 'bg-concrete'
                     }`}
                   />
                   <span
                     className={`absolute w-3 h-3 rounded-full border-2 border-[var(--theme-border)] ${
-                      online ? 'bg-signal' : 'bg-concrete'
+                      online && !isExpired ? 'bg-signal' : 'bg-concrete'
                     }`}
                   />
                 </div>
               </div>
 
               {/* Proximity Information Labels */}
-              <div className="absolute top-3 left-3 font-mono text-[11px] text-[var(--theme-text-soft)] bg-[var(--theme-surface)]/90 p-2 border border-[var(--theme-border)]">
-                <div>ZONE: Indiranagar, Domlur &amp; HAL</div>
+              <div className="absolute top-3 left-3 max-w-[calc(100%-24px)] font-mono text-[10px] sm:text-[11px] text-[var(--theme-text-soft)] bg-[var(--theme-surface)]/90 p-2 border border-[var(--theme-border)]">
+                <div className="truncate max-w-[280px] sm:max-w-[360px]" title={partner?.address || dashboardData?.partner?.address || 'Operating Zone'}>
+                  ZONE: {partner?.address || dashboardData?.partner?.address || 'Operating Zone'}
+                </div>
                 <div>RADIUS: {radarZoom} km standard (SRS FR-P8)</div>
                 <div>DISPATCH MATCH: Nearest Online Partner</div>
               </div>
 
               <div className="absolute bottom-3 right-3 font-mono text-[11px] text-[var(--theme-text-soft)] bg-[var(--theme-surface)]/90 p-2 border border-[var(--theme-border)]">
-                {online ? (
+                {isExpired ? (
+                  <span className="text-signal font-bold">✕ PASS EXPIRED</span>
+                ) : online ? (
                   <span className="text-done font-bold">● LISTENER ACTIVE</span>
                 ) : (
                   <span className="text-[var(--theme-text-muted)] font-bold">○ PAUSED (OFFLINE)</span>
@@ -357,9 +459,12 @@ export default function PartnerDashboard({
               <button
                 type="button"
                 onClick={onSimulateIncomingRequest}
-                className="btn-primary min-h-[46px] px-6 font-mono text-xs font-bold uppercase tracking-wider shadow-hard shrink-0"
+                disabled={isExpired || !online}
+                className={`btn-primary min-h-[46px] px-6 font-mono text-xs font-bold uppercase tracking-wider shadow-hard shrink-0 ${
+                  isExpired || !online ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
               >
-                ⚡ TRIGGER INCOMING REQUEST →
+                [+] TRIGGER INCOMING REQUEST →
               </button>
             </div>
           </div>

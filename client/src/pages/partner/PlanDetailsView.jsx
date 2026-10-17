@@ -37,9 +37,10 @@ export default function PlanDetailsView({
   }, [subscription, partner?.id]);
 
   const daysRemaining =
-    forcedDays !== null ? forcedDays : currentSub?.days_remaining ?? 108;
-  const isExpiringSoon = daysRemaining > 0 && daysRemaining <= 7;
-  const isExpired = daysRemaining <= 0 || currentSub?.status === 'expired';
+    forcedDays !== null ? forcedDays : currentSub?.days_remaining ?? 0;
+  const isSubscribed = Boolean(currentSub && currentSub.status === 'active' && daysRemaining > 0);
+  const isExpiringSoon = isSubscribed && daysRemaining <= 7;
+  const isExpired = !isSubscribed;
 
   // Handle Plan Renewal
   const handleRenew = async (planId) => {
@@ -81,10 +82,10 @@ export default function PlanDetailsView({
             </h1>
           </div>
 
-          {/* Current Status Pill */}
+          {/* Current Status Rubber Stamp (docs/DESIGN.md Section 5) */}
           <div className="flex items-center gap-2 self-start sm:self-auto">
             <span
-              className={`border-2 px-3 py-1 font-mono text-xs font-bold uppercase shadow-hard-sm ${
+              className={`border-2 px-3 py-1 font-mono text-xs font-bold uppercase shadow-hard-sm inline-block -rotate-3 ${
                 isExpired
                   ? 'border-ink bg-ink text-paper'
                   : isExpiringSoon
@@ -93,10 +94,10 @@ export default function PlanDetailsView({
               }`}
             >
               {isExpired
-                ? '✕ PLAN EXPIRED · DISPATCH LOCKED'
+                ? 'PLAN EXPIRED'
                 : isExpiringSoon
-                ? `! EXPIRING IN ${daysRemaining} DAYS`
-                : '✓ PASS ACTIVE & HEALTHY'}
+                ? `EXPIRING IN ${daysRemaining} DAYS`
+                : 'PASS ACTIVE'}
             </span>
           </div>
         </div>

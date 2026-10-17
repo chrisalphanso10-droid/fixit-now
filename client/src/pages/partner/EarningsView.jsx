@@ -27,10 +27,10 @@ export default function EarningsView({ partner }) {
     );
   }
 
-  const totalEarnings = earningsData.total_earnings || 28450.0;
-  const todayEarnings = earningsData.today_earnings || 950.0;
-  const totalJobs = earningsData.total_jobs || 142;
-  const thisWeekEarnings = 6800.0;
+  const totalEarnings = earningsData.total_earnings ?? 0.0;
+  const todayEarnings = earningsData.today_earnings ?? 0.0;
+  const totalJobs = earningsData.total_jobs ?? 0;
+  const thisWeekEarnings = earningsData.this_week_earnings ?? 0.0;
   const platformSaved = Math.round(totalEarnings * 0.2); // 20% commission on other apps
 
   const ledger = earningsData.ledger || [];
@@ -83,7 +83,7 @@ export default function EarningsView({ partner }) {
             ₹{todayEarnings.toFixed(2)}
           </div>
           <span className="font-mono text-[10px] text-[var(--theme-text-muted)] block mt-1">
-            {earningsData.today_jobs || 2} jobs closed today
+            {earningsData.today_jobs ?? 0} jobs closed today
           </span>
         </div>
 
