@@ -4,7 +4,7 @@
  * Conforms to SRS FR-C1, FR-C2, FR-C3, FR-C4 and docs/DESIGN.md.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   customerLogin,
   customerRegister,
@@ -18,8 +18,19 @@ export default function CustomerAuthView({
   onSuccess,
   onCancel,
 }) {
-  const { loginCustomer: authLoginCustomer, registerCustomer: authRegisterCustomer } = useAuth() || {};
+  const {
+    user,
+    role,
+    isAuthenticated,
+    logout: authLogout,
+    loginCustomer: authLoginCustomer,
+    registerCustomer: authRegisterCustomer,
+  } = useAuth() || {};
   const [mode, setMode] = useState(initialMode); // 'login' | 'register' | 'forgot'
+
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
 
   // Login state
   const [loginEmail, setLoginEmail] = useState('ananya@example.com');
@@ -191,6 +202,78 @@ export default function CustomerAuthView({
             </button>
           )}
         </div>
+
+        {/* Mode Switch Tabs (Min 44px touch target) */}
+        <div className="grid grid-cols-2 border-2 border-ink bg-concrete p-1 gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              setMode('login');
+              setError(null);
+              setSuccessMessage(null);
+            }}
+            className={`min-h-[44px] font-mono text-xs font-bold uppercase tracking-wider transition-colors ${
+              mode === 'login'
+                ? 'bg-ink text-paper shadow-hard-sm'
+                : 'text-soft hover:text-ink hover:bg-paper'
+            }`}
+          >
+            Sign In (Login)
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMode('register');
+              setError(null);
+              setSuccessMessage(null);
+            }}
+            className={`min-h-[44px] font-mono text-xs font-bold uppercase tracking-wider transition-colors ${
+              mode === 'register'
+                ? 'bg-ink text-paper shadow-hard-sm'
+                : 'text-soft hover:text-ink hover:bg-paper'
+            }`}
+          >
+            Register (New Account)
+          </button>
+        </div>
+
+        {/* Active Session Info if already logged in */}
+        {isAuthenticated && user && (
+          <div className="p-3 bg-concrete border-2 border-ink font-mono text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="truncate mr-2">
+                Active Session: <strong>{user.name}</strong> ({role})
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (authLogout) authLogout();
+                  else localStorage.clear();
+                  setError(null);
+                  setSuccessMessage('Logged out. You can now sign in.');
+                }}
+                className="text-signal underline font-bold uppercase shrink-0"
+              >
+                [Switch / Log Out]
+              </button>
+            </div>
+            <div className="text-[11px] text-soft">
+              Want to use your active session?{' '}
+              <a
+                href={
+                  role === 'customer'
+                    ? '#/customer/dashboard'
+                    : role === 'partner'
+                    ? '#/partner/dashboard'
+                    : '#/admin/dashboard'
+                }
+                className="text-ink font-bold underline hover:text-signal"
+              >
+                Continue to Dashboard →
+              </a>
+            </div>
+          </div>
+        )}
 
         {/* Role Helper Switcher */}
         <div className="bg-concrete border border-ink p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">

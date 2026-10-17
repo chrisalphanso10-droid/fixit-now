@@ -14,11 +14,32 @@ export default function PartnerHistoryView({ partner }) {
   const [selectedReceipt, setSelectedReceipt] = useState(null);
 
   useEffect(() => {
+    let isMounted = true;
     setLoading(true);
-    getPartnerHistory(partner?.id || 101, filter).then((data) => {
-      setHistory(data);
-      setLoading(false);
-    });
+
+    const loadData = () => {
+      getPartnerHistory(partner?.id || 101, filter).then((data) => {
+        if (isMounted) {
+          setHistory(data);
+          setLoading(false);
+        }
+      });
+    };
+
+    loadData();
+
+    const handleUpdate = () => {
+      loadData();
+    };
+
+    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('fixit_partner_history_updated', handleUpdate);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('fixit_partner_history_updated', handleUpdate);
+    };
   }, [partner?.id, filter]);
 
   return (
@@ -92,7 +113,11 @@ export default function PartnerHistoryView({ partner }) {
       ) : (
         <div className="space-y-4">
           {history.map((job) => {
-            const isCompleted = job.status === 'completed';
+            const isCompleted =
+              job.status === 'completed' ||
+              job.status === 'service_completed' ||
+              job.status === 'payment_completed' ||
+              job.status === 'paid';
 
             return (
               <div
@@ -154,12 +179,12 @@ export default function PartnerHistoryView({ partner }) {
                     <div>
                       {isCompleted ? (
                         <>
-                          <span className="text-[var(--theme-text-soft)] block text-[10px]">DIRECT PAYMENT SETTLED:</span>
-                          <div className="font-display font-extrabold text-2xl text-done">
-                            ₹{job.amount?.toFixed(2)}
+                          <span className="text-[var(--theme-text-soft)] block text-[10px]">PAYMENT STATUS:</span>
+                          <div className="font-display font-extrabold text-base sm:text-lg text-done mt-0.5">
+                            ✓ Payment Received
                           </div>
                           <span className="text-[11px] text-[var(--theme-text-muted)] block mt-0.5">
-                            {job.payment_mode} · 0% commission deducted
+                            Job Completed · Direct customer settlement
                           </span>
 
                           {job.rating && (
@@ -263,9 +288,9 @@ export default function PartnerHistoryView({ partner }) {
                   <span className="text-muted">SETTLEMENT METHOD:</span>
                   <span className="font-bold text-ink">{selectedReceipt.payment_mode}</span>
                 </div>
-                <div className="border-t border-ink/20 pt-2 flex justify-between text-base font-bold">
-                  <span>AMOUNT COLLECTED:</span>
-                  <span className="text-done">₹{selectedReceipt.amount?.toFixed(2)}</span>
+                <div className="border-t border-ink/20 pt-2 flex justify-between text-sm font-bold">
+                  <span>PAYMENT STATUS:</span>
+                  <span className="text-done">✓ Payment Received · Job Completed</span>
                 </div>
               </div>
 

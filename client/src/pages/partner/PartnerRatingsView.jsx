@@ -12,10 +12,31 @@ export default function PartnerRatingsView({ partner }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getPartnerRatings(partner?.id || 101).then((data) => {
-      setRatingsData(data);
-      setLoading(false);
-    });
+    let isMounted = true;
+
+    const loadRatings = () => {
+      getPartnerRatings(partner?.id || 101).then((data) => {
+        if (isMounted) {
+          setRatingsData(data);
+          setLoading(false);
+        }
+      });
+    };
+
+    loadRatings();
+
+    const handleUpdate = () => {
+      loadRatings();
+    };
+
+    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('fixit_partner_ratings_updated', handleUpdate);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('fixit_partner_ratings_updated', handleUpdate);
+    };
   }, [partner?.id]);
 
   if (loading || !ratingsData) {
@@ -160,7 +181,7 @@ export default function PartnerRatingsView({ partner }) {
                     {review.customer_name}
                   </span>
                   <span className="text-[10px] px-1.5 py-0.2 bg-concrete border border-ink text-ink font-bold">
-                    ORDER #{review.order_id}
+                    ORDER #{review.order_number || review.order_id}
                   </span>
                 </div>
 

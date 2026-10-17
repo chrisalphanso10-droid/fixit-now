@@ -1,67 +1,107 @@
 /**
  * FixIt Now - Searching Screen
- * Searching state with sweeping ruler strip, countdown simulation, cancel option,
- * and "All partners busy" failure state.
+ * Searching state with sweeping ruler strip, real-time WebSocket status updates,
+ * cancel option, and "All partners busy" failure state.
  * Conforms to SRS FR-C11, FR-C12, FR-M5 and docs/DESIGN.md Section 6.
  */
 
 import { useState, useEffect } from 'react';
 import { assignMatchedPartner, cancelServiceRequest } from '../../services/requestService';
+import socketService from '../../services/socketService';
 
 export default function SearchingView({
   activeRequest,
   onPartnerMatched,
   onNavigate,
 }) {
-  const [countdown, setCountdown] = useState(5);
-  const [busyState, setBusyState] = useState(false);
+  const [busyState, setBusyState] = useState(
+    activeRequest?.dispatch_status === 'busy' || activeRequest?.status === 'cancelled'
+  );
   const [cancelling, setCancelling] = useState(false);
+  const [partnerAttempt, setPartnerAttempt] = useState(1);
+  const [totalPartners, setTotalPartners] = useState(activeRequest?.eligible_partners_count || 1);
+  const [secondsRemaining, setSecondsRemaining] = useState(30);
 
+  useEffect(() => {
+    if (!activeRequest) return;
+
+    if (activeRequest.dispatch_status === 'busy' || activeRequest.status === 'cancelled') {
+      setBusyState(true);
+      return;
+    }
+
+    // Register with WebSocket rooms
+    if (activeRequest.customer_id) {
+      socketService.registerCustomer(activeRequest.customer_id);
+    }
+    if (activeRequest.id) {
+      socketService.joinRequest(activeRequest.id);
+    }
+
+    // 1. Listen for partner acceptance
+    const unsubAccepted = socketService.onRequestAccepted(async (data) => {
+      if (!activeRequest?.id || String(data.requestId) === String(activeRequest.id)) {
+        const updated = await assignMatchedPartner(data.requestId, data.partner, data);
+        if (onPartnerMatched) onPartnerMatched(updated);
+        onNavigate('tracking');
+      }
+    });
+
+    // 2. Listen for "All partners busy" failure state (SRS FR-C12, FR-M5)
+    const unsubBusy = socketService.onAllPartnersBusy((data) => {
+      if (String(data.requestId) === String(activeRequest.id)) {
+        setBusyState(true);
+      }
+    });
+
+    // 3. Listen for search progression updates across eligible partners
+    const unsubUpdate = socketService.onSearchingUpdate((data) => {
+      if (String(data.requestId) === String(activeRequest.id)) {
+        setPartnerAttempt(data.attemptingPartnerIndex || 1);
+        setTotalPartners(data.totalEligible || 1);
+        if (data.countdown) setSecondsRemaining(data.countdown);
+      }
+    });
+
+    return () => {
+      unsubAccepted();
+      unsubBusy();
+      unsubUpdate();
+    };
+  }, [activeRequest, onNavigate, onPartnerMatched]);
+
+  // Visual countdown timer tick
   useEffect(() => {
     if (busyState) return;
 
-    // Normal countdown simulation
     const interval = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          // Match successful!
-          if (activeRequest) {
-            assignMatchedPartner(activeRequest.id, activeRequest.service_id).then((updated) => {
-              if (onPartnerMatched) onPartnerMatched(updated);
-              onNavigate('tracking');
-            });
-          }
-          return 0;
-        }
+      setSecondsRemaining((prev) => {
+        if (prev <= 1) return 30; // reset for next partner cascade
         return prev - 1;
       });
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [activeRequest, busyState, onNavigate, onPartnerMatched]);
+  }, [busyState]);
 
   const handleCancel = async () => {
     setCancelling(true);
     try {
       if (activeRequest) {
+        socketService.cancelJob(activeRequest.id, 'Cancelled by customer during search');
         await cancelServiceRequest(activeRequest.id, 'Cancelled during partner search');
       }
       onNavigate('dashboard');
     } catch (err) {
       console.error('Cancel failed:', err);
+      onNavigate('dashboard');
     } finally {
       setCancelling(false);
     }
   };
 
-  const handleSimulateBusy = () => {
-    setBusyState(true);
-  };
-
   const handleRetry = () => {
-    setBusyState(false);
-    setCountdown(5);
+    onNavigate('new-request');
   };
 
   return (
@@ -102,11 +142,11 @@ export default function SearchingView({
 
           <div className="space-y-3">
             <h2 className="text-2xl font-display font-extrabold text-ink">
-              All eligible fixers are currently occupied
+              All partners busy, try again later
             </h2>
             <p className="text-sm sm:text-base text-soft font-sans">
               We checked all verified partners within 2 km of your location. No fixers are available
-              right now. Please try again in a few minutes, or adjust your request.
+              right now or all eligible partners are occupied. Please try again in a few minutes, or adjust your request address.
             </p>
           </div>
 
@@ -116,7 +156,7 @@ export default function SearchingView({
               onClick={handleRetry}
               className="btn-primary w-full sm:w-auto min-h-[44px]"
             >
-              Retry Search (2 km) ↺
+              Retry Request (2 km) ↺
             </button>
             <button
               type="button"
@@ -134,11 +174,14 @@ export default function SearchingView({
         <div className="bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] p-6 sm:p-8 shadow-hard space-y-6">
           {/* Header Ticket Row */}
           <div className="flex items-center justify-between border-b-2 border-[var(--theme-border)] pb-4 font-mono text-xs">
-            <span className="font-bold text-signal uppercase tracking-wider">
-              PINGING LOCAL RADAR
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 bg-signal inline-block animate-ping" />
+              <span className="font-bold text-signal uppercase tracking-wider">
+                OFFERING TO PARTNER {partnerAttempt} OF {Math.max(1, totalPartners)}
+              </span>
+            </div>
             <span className="font-bold uppercase text-[var(--theme-text-muted)]">
-              EST. MATCH: {countdown}s
+              TIMER: {secondsRemaining}s
             </span>
           </div>
 
@@ -153,10 +196,13 @@ export default function SearchingView({
 
             <div className="text-center space-y-1">
               <span className="font-display font-extrabold text-xl text-[var(--theme-text-main)] block">
-                {activeRequest ? activeRequest.service_name : 'Plumbing Repairs'}
+                {activeRequest ? activeRequest.service_name : 'Trade Service'}
               </span>
               <span className="font-mono text-xs text-[var(--theme-text-soft)] block max-w-sm">
                 Target Area: {activeRequest ? activeRequest.address : 'Indiranagar, Bengaluru'}
+              </span>
+              <span className="font-mono text-[11px] text-[var(--theme-text-muted)] block">
+                Order Ref: {activeRequest?.order_number || 'ORD-0428'}
               </span>
             </div>
           </div>
@@ -175,15 +221,9 @@ export default function SearchingView({
               {cancelling ? 'Cancelling...' : '✕ Cancel Request'}
             </button>
 
-            {/* Demo Simulation Helper for Evaluator */}
-            <button
-              type="button"
-              onClick={handleSimulateBusy}
-              className="text-xs font-mono font-bold uppercase underline text-[var(--theme-text-muted)] hover:text-signal"
-              title="Test the 'All partners busy' error state required by SRS FR-C12"
-            >
-              [Test: Simulate &quot;All Partners Busy&quot;]
-            </button>
+            <span className="font-mono text-[11px] text-[var(--theme-text-muted)]">
+              Auto-cascades to next nearest fixer if unanswered
+            </span>
           </div>
         </div>
       )}

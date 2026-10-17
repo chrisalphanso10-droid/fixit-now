@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch-path=src src/server.js",
+    "test": "node test/matching.test.js",
     "db:schema": "node ../db/migrate.js",
     "db:seed": "node ../db/seed.js"
   },
@@ -25,6 +26,7 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.4.0",
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "socket.io": "^4.8.4"
   }
 }

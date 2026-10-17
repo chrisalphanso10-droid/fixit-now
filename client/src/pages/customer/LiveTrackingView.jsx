@@ -6,7 +6,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { updateTrackingStep, cancelServiceRequest } from '../../services/requestService';
+import { cancelServiceRequest } from '../../services/requestService';
+import socketService from '../../services/socketService';
 
 export default function LiveTrackingView({
   activeRequest,
@@ -17,16 +18,140 @@ export default function LiveTrackingView({
   // 1: Request accepted
   // 2: Partner on the way
   // 3: Partner arrived
-  // 4: Service started
+  // 4: Service started (OTP verified)
   // 5: Service completed
   // 6: Payment completed
   const [currentStep, setCurrentStep] = useState(activeRequest?.step_index || 1);
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [speed, setSpeed] = useState(1); // 1x, 2x, 4x
-  const [etaMinutes, setEtaMinutes] = useState(14);
-  const [partnerProgress, setPartnerProgress] = useState(0); // 0 (start) to 1 (arrived)
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('Found another solution');
+  const [showOtpModal, setShowOtpModal] = useState(
+    activeRequest?.step_index === 3 ||
+      activeRequest?.status === 'partner_arrived' ||
+      activeRequest?.status === 'arrived'
+  );
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentConfirmed, setPaymentConfirmed] = useState(
+    activeRequest?.step_index >= 6 ||
+      activeRequest?.status === 'paid' ||
+      activeRequest?.status === 'payment_completed' ||
+      false
+  );
+
+  // Sync step from activeRequest prop if provided
+  useEffect(() => {
+    if (activeRequest?.step_index) {
+      setCurrentStep(activeRequest.step_index);
+      if (
+        activeRequest.step_index === 3 ||
+        activeRequest.status === 'partner_arrived' ||
+        activeRequest.status === 'arrived'
+      ) {
+        setShowOtpModal(true);
+      }
+      if (
+        activeRequest.step_index >= 6 ||
+        activeRequest.status === 'paid' ||
+        activeRequest.status === 'payment_completed'
+      ) {
+        setPaymentConfirmed(true);
+      }
+    }
+  }, [activeRequest?.step_index, activeRequest?.status]);
+
+  // Real-time Socket.IO listener: updates tracking status ONLY after partner updates position/status!
+  useEffect(() => {
+    if (!activeRequest?.id) return;
+
+    socketService.joinRequest(activeRequest.id);
+    if (activeRequest.customer_id) {
+      socketService.registerCustomer(activeRequest.customer_id);
+    }
+
+    const handleOtpPrompt = (data) => {
+      if (
+        !data ||
+        !data.requestId ||
+        String(data.requestId) === String(activeRequest.id)
+      ) {
+        setShowOtpModal(true);
+      }
+    };
+
+    const handleStatusUpdate = (data) => {
+      if (
+        data &&
+        (String(data.requestId) === String(activeRequest.id) ||
+          String(data.id) === String(activeRequest.id))
+      ) {
+        if (data.step_index != null) {
+          setCurrentStep(data.step_index);
+          // If partner arrived (step 3), automatically pop up OTP on customer screen!
+          if (
+            data.step_index === 3 ||
+            data.status === 'arrived' ||
+            data.status === 'partner_arrived'
+          ) {
+            setShowOtpModal(true);
+          }
+          // If service started (step 4+), automatically close OTP modal as it is verified!
+          if (
+            data.step_index >= 4 ||
+            data.status === 'service_started' ||
+            data.status === 'in_progress'
+          ) {
+            setShowOtpModal(false);
+          }
+          // If payment completed (step 6), confirm payment on customer screen!
+          if (
+            data.step_index >= 6 ||
+            data.status === 'paid' ||
+            data.status === 'payment_completed'
+          ) {
+            setPaymentConfirmed(true);
+            setShowPaymentModal(false);
+          }
+        }
+      }
+    };
+
+    const handleCancel = (data) => {
+      if (
+        data &&
+        (String(data.requestId) === String(activeRequest.id) ||
+          String(data.id) === String(activeRequest.id))
+      ) {
+        if (onCancel) onCancel();
+        onNavigate('history');
+      }
+    };
+
+    try {
+      if (typeof socketService.on === 'function') {
+        socketService.on('request_status_updated', handleStatusUpdate);
+        socketService.on('otp_prompt_customer', handleOtpPrompt);
+        socketService.on('request_cancelled', handleCancel);
+      }
+    } catch (err) {
+      console.warn('[LiveTrackingView] socket subscription warning:', err);
+    }
+
+    return () => {
+      try {
+        if (typeof socketService.off === 'function') {
+          socketService.off('request_status_updated', handleStatusUpdate);
+          socketService.off('otp_prompt_customer', handleOtpPrompt);
+          socketService.off('request_cancelled', handleCancel);
+        }
+      } catch {
+        // ignore cleanup warning
+      }
+    };
+  }, [activeRequest?.id, activeRequest?.customer_id, onCancel, onNavigate]);
+
+  // Derived progress and ETA from currentStep (Step 1: 0%, Step 2: 50%, Step 3+: 100%)
+  const partnerProgress = currentStep <= 1 ? 0 : currentStep === 2 ? 0.5 : 1.0;
+  const etaMinutes = currentStep <= 1 ? 14 : currentStep === 2 ? 7 : 0;
 
   // Steps definition matching SRS FR-C14
   const steps = [
@@ -50,13 +175,14 @@ export default function LiveTrackingView({
 
   // Calculate current partner position along waypoints
   const getPartnerCoords = (progress) => {
+    const validProgress = typeof progress === 'number' && !isNaN(progress) ? progress : 0;
     const totalSegments = waypoints.length - 1;
-    const scaled = Math.max(0, Math.min(1, progress)) * totalSegments;
+    const scaled = Math.max(0, Math.min(1, validProgress)) * totalSegments;
     const segIndex = Math.min(Math.floor(scaled), totalSegments - 1);
     const segT = scaled - segIndex;
 
-    const p1 = waypoints[segIndex];
-    const p2 = waypoints[segIndex + 1];
+    const p1 = waypoints[segIndex] || waypoints[0];
+    const p2 = waypoints[segIndex + 1] || waypoints[waypoints.length - 1];
 
     return {
       x: p1.x + (p2.x - p1.x) * segT,
@@ -66,81 +192,27 @@ export default function LiveTrackingView({
 
   const partnerPos = getPartnerCoords(partnerProgress);
 
-  // Timer simulation to advance steps and partner movement
-  useEffect(() => {
-    if (!isPlaying) return;
-
-    const stepIntervalDuration = (6000 / speed); // base: 6s per step at 1x
-    const tickIntervalMs = 100;
-    const progressIncrement = 1 / (stepIntervalDuration / tickIntervalMs);
-
-    const interval = setInterval(() => {
-      // Step 2 specifically simulates travelling movement
-      if (currentStep === 2) {
-        setPartnerProgress((prev) => {
-          const next = prev + progressIncrement;
-          if (next >= 1) {
-            // Arrived at customer location
-            setCurrentStep(3);
-            updateTrackingStep(3);
-            setEtaMinutes(0);
-            return 1;
-          }
-          const remainingMinutes = Math.max(1, Math.round(14 * (1 - next)));
-          setEtaMinutes(remainingMinutes);
-          return next;
-        });
-      } else if (currentStep === 1) {
-        // Automatically transition to step 2 after brief delay
-        setTimeout(() => {
-          setCurrentStep(2);
-          updateTrackingStep(2);
-        }, 1500 / speed);
-      } else if (currentStep < 6) {
-        // Automatically advance remaining steps
-        setCurrentStep((prev) => {
-          const next = prev + 1;
-          updateTrackingStep(next);
-          return next;
-        });
-      }
-    }, stepIntervalDuration);
-
-    return () => clearInterval(interval);
-  }, [currentStep, isPlaying, speed]);
-
-  const handleStepClick = (stepId) => {
-    setCurrentStep(stepId);
-    updateTrackingStep(stepId);
-    if (stepId <= 1) {
-      setPartnerProgress(0);
-      setEtaMinutes(14);
-    } else if (stepId === 2) {
-      setPartnerProgress(0.5);
-      setEtaMinutes(7);
-    } else {
-      setPartnerProgress(1);
-      setEtaMinutes(0);
-    }
-  };
-
   const handleCancelSubmit = async () => {
-    if (activeRequest) {
+    if (activeRequest && activeRequest.id) {
       await cancelServiceRequest(activeRequest.id, cancelReason);
     }
     setShowCancelModal(false);
     if (onCancel) onCancel();
-    onNavigate('dashboard');
+    onNavigate('history');
   };
 
-  const partner = activeRequest?.partner || {
-    name: 'Rajesh Kumar',
-    phone: '+91 98450 11223',
-    rating: 4.9,
-    service_name: activeRequest?.service_name || 'Plumbing Repairs',
-    badge: 'Certified Master Plumber',
-    vehicle: 'Bajaj Pulsar (KA-03-HJ-4421)',
+  const rawPartner = activeRequest?.partner || {};
+  const partner = {
+    name: rawPartner.name || activeRequest?.partner_name || 'Rajesh Kumar',
+    phone: rawPartner.phone || activeRequest?.partner_phone || '+91 98450 11223',
+    rating: rawPartner.rating || activeRequest?.partner_rating || 4.9,
+    service_name: rawPartner.service_name || activeRequest?.service_name || 'Plumbing Repairs',
+    badge: rawPartner.badge || activeRequest?.partner_badge || 'Certified Master Plumber',
+    vehicle: rawPartner.vehicle || activeRequest?.partner_vehicle || 'Bajaj Pulsar (KA-03-HJ-4421)',
   };
+  const partnerInitial = (partner.name && typeof partner.name === 'string')
+    ? partner.name.charAt(0)
+    : 'P';
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -283,59 +355,152 @@ export default function LiveTrackingView({
           </svg>
         </div>
 
-        {/* Map Telemetry Controls & Speed Adjustment */}
-        <div className="p-3 bg-[var(--theme-surface)] flex flex-wrap items-center justify-between gap-3 font-mono text-xs">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsPlaying(!isPlaying)}
-              className="px-2.5 py-1 border border-[var(--theme-border)] bg-[var(--theme-surface-sub)] font-bold uppercase hover:bg-signal hover:text-ink"
-            >
-              {isPlaying ? '⏸ Pause Timer' : '▶ Resume Timer'}
-            </button>
-            <div className="flex items-center gap-1 border border-[var(--theme-border)] p-0.5">
-              {[1, 2, 4].map((s) => (
-                <button
-                  type="button"
-                  key={s}
-                  onClick={() => setSpeed(s)}
-                  className={`px-2 py-0.5 font-bold ${
-                    speed === s ? 'bg-signal text-ink' : 'text-[var(--theme-text-muted)]'
-                  }`}
-                >
-                  {s}x
-                </button>
-              ))}
-            </div>
+        {/* Live Status Telemetry Bar */}
+        <div className="p-3 bg-[var(--theme-surface)] flex flex-wrap items-center justify-between gap-3 font-mono text-xs border-t border-[var(--theme-border)]">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-signal animate-ping" />
+            <span className="font-bold text-[var(--theme-text-main)] uppercase tracking-wider">
+              {currentStep === 1
+                ? 'WAITING FOR PARTNER TO START TRIP'
+                : currentStep === 2
+                ? 'PARTNER EN ROUTE TO YOUR LOCATION'
+                : currentStep === 3
+                ? 'PARTNER ARRIVED · SHARE 6-DIGIT OTP'
+                : currentStep === 4
+                ? 'SERVICE IN PROGRESS'
+                : currentStep === 5
+                ? 'SERVICE COMPLETED · SETTLE ON-SITE'
+                : 'WORK ORDER SETTLED DIRECTLY'}
+            </span>
           </div>
 
-          <div className="flex items-center gap-1">
-            <span className="text-[var(--theme-text-muted)] text-[11px] uppercase mr-1">
-              MANUAL STEP:
-            </span>
-            {[1, 2, 3, 4, 5, 6].map((st) => (
-              <button
-                type="button"
-                key={st}
-                onClick={() => handleStepClick(st)}
-                className={`w-6 h-6 border text-center font-bold ${
-                  currentStep === st
-                    ? 'bg-signal text-ink border-ink'
-                    : currentStep > st
-                    ? 'bg-done text-paper border-done'
-                    : 'border-[var(--theme-border)] text-[var(--theme-text-muted)]'
-                }`}
-                title={`Jump to step ${st}`}
-              >
-                {st}
-              </button>
-            ))}
-          </div>
+          <span className="font-mono text-[11px] text-[var(--theme-text-muted)] uppercase">
+            LIVE DISPATCH · STATUS UPDATED ONLY BY PARTNER
+          </span>
         </div>
       </div>
 
       {/* ============================================================== */}
-      {/* 2. CUSTOMER COPY WORK-ORDER TICKET (DESIGN.md Section 6)        */}
+      {/* 2. PROMINENT 6-DIGIT SERVICE OTP (SRS FR-C16)                   */}
+      {/* ============================================================== */}
+      {currentStep < 4 ? (
+        <div className="p-5 sm:p-6 bg-paper border-2 border-signal shadow-hard space-y-2 text-ink">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-ink pb-3">
+            <span className="font-mono text-xs text-signal font-bold uppercase tracking-wider">
+              YOUR 6-DIGIT SERVICE VERIFICATION OTP
+            </span>
+            <span className="stamp-badge bg-signal text-ink border-ink text-[11px]">
+              SHARE UPON ARRIVAL
+            </span>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+            <div className="font-mono text-4xl sm:text-5xl font-black text-ink tracking-[0.25em]">
+              {activeRequest?.service_otp || '------'}
+            </div>
+            <div className="flex flex-col sm:items-end gap-2">
+              <p className="font-mono text-xs text-soft max-w-sm">
+                When the fixer arrives at your door, share this 6-digit code. They will verify it on their screen to authenticate and commence repair work.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowOtpModal(true)}
+                className="btn-primary min-h-[38px] px-4 text-xs font-mono font-bold uppercase tracking-wider self-start sm:self-auto"
+              >
+                POP UP OTP SCREEN ↗
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="p-4 bg-concrete border-2 border-done flex flex-wrap items-center justify-between gap-2 text-ink">
+          <div className="flex items-center gap-2.5">
+            <span className="w-3 h-3 bg-done rounded-full flex items-center justify-center text-paper font-bold text-[10px]">
+              ✓
+            </span>
+            <span className="font-mono text-xs text-done font-bold uppercase tracking-wider">
+              SERVICE OTP VERIFIED ({activeRequest?.service_otp})
+            </span>
+          </div>
+          <span className="font-mono text-xs text-soft uppercase">
+            WORK ORDER IN PROGRESS · CANCEL LOCKED
+          </span>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 2.5 PROCEED TO PAYMENT & SETTLEMENT ACTION (SRS FR-C18)         */}
+      {/* Visible when service work is completed by partner              */}
+      {/* ============================================================== */}
+      {currentStep === 5 && !paymentConfirmed && (
+        <div className="p-5 sm:p-6 bg-paper border-2 border-signal shadow-hard space-y-3 text-ink">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-ink pb-3">
+            <span className="font-mono text-xs text-signal font-bold uppercase tracking-wider">
+              SERVICE COMPLETED · ACTION REQUIRED
+            </span>
+            <span className="stamp-badge bg-signal text-ink border-ink text-[11px]">
+              STEP 5 OF 6
+            </span>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+            <div>
+              <h3 className="font-display font-extrabold text-xl text-ink">
+                Work Finished by {partner.name || 'Partner'}
+              </h3>
+              <p className="font-mono text-xs text-soft mt-1 max-w-lg">
+                The partner has completed all repair work and inspections. Please proceed to payment to settle directly on-site (Cash or UPI).
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowPaymentModal(true)}
+              className="btn-primary min-h-[46px] px-8 text-sm uppercase font-mono font-bold tracking-wider shadow-hard shrink-0"
+            >
+              PROCEED TO PAYMENT →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 2.6 PAYMENT CONFIRMATION BANNER                                 */}
+      {/* Visible once customer or partner confirms payment settlement   */}
+      {/* ============================================================== */}
+      {(currentStep >= 6 || paymentConfirmed) && (
+        <div className="p-5 sm:p-6 bg-paper border-2 border-done shadow-hard space-y-3 text-ink">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-ink pb-3">
+            <span className="font-mono text-xs text-done font-bold uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-done inline-block" />
+              PAYMENT CONFIRMATION
+            </span>
+            <span className="stamp-badge bg-done text-paper border-done text-[11px]">
+              ✓ STEP 6 COMPLETE
+            </span>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 bg-done text-paper font-bold text-xs flex items-center justify-center rounded-full">✓</span>
+                <h3 className="font-display font-extrabold text-xl text-ink">
+                  Payment Confirmed
+                </h3>
+              </div>
+              <p className="font-mono text-xs text-soft mt-1 max-w-lg">
+                Your direct payment with {partner.name || 'Partner'} has been confirmed. Work order is successfully closed.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onNavigate('rate-receipt')}
+              className="btn-primary min-h-[46px] px-6 text-xs uppercase font-mono font-bold tracking-wider shadow-hard shrink-0"
+            >
+              RATE PARTNER &amp; VIEW RECEIPT →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 3. CUSTOMER COPY WORK-ORDER TICKET (DESIGN.md Section 6)        */}
       {/* ============================================================== */}
       <div className="bg-paper border-2 border-ink p-6 sm:p-8 shadow-hard text-ink space-y-6">
         {/* Ticket Header */}
@@ -343,46 +508,42 @@ export default function LiveTrackingView({
           <div className="flex items-center gap-3">
             <span className="w-3.5 h-3.5 bg-paper border-2 border-ink inline-block" />
             <span className="font-mono text-xs sm:text-sm font-bold uppercase tracking-widest text-ink">
-              CUSTOMER COPY · No. {activeRequest?.order_number?.replace('ORD-', '') || '0427'}
+              CUSTOMER COPY · No. {String(activeRequest?.order_number || '0427').replace('ORD-', '')}
             </span>
           </div>
 
-          {/* Service OTP Badge (SRS FR-C16: confirmed before service starts) */}
-          <div className="flex items-center gap-2 p-1.5 px-3 bg-concrete border-2 border-ink">
-            <span className="font-mono text-xs text-soft font-bold uppercase">SERVICE OTP:</span>
-            <span className="font-mono text-base font-extrabold text-signal tracking-widest">
-              {activeRequest?.service_otp || '8392'}
-            </span>
-          </div>
+          <span className="stamp-badge bg-concrete text-ink border-ink text-[10px]">
+            DIRECT ON-SITE SETTLEMENT
+          </span>
         </div>
 
         {/* Partner Details Card */}
         <div className="p-4 bg-concrete border-2 border-ink flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-signal border-2 border-ink flex items-center justify-center shrink-0 font-display font-black text-xl text-ink">
-              {partner.name.charAt(0)}
+              {partnerInitial}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-display font-extrabold text-xl text-ink">{partner.name}</span>
+                <span className="font-display font-extrabold text-xl text-ink">{partner.name || 'Partner'}</span>
                 <span className="stamp-badge bg-paper text-ink border-ink text-[10px] py-0 px-1.5">
                   KYC VERIFIED
                 </span>
               </div>
               <p className="text-xs text-soft font-mono mt-0.5">
-                {partner.badge || partner.service_name} · ★ {partner.rating || '4.9'}
+                {partner.badge || partner.service_name || 'Certified Fixer'} · ★ {partner.rating || '4.9'}
               </p>
-              <p className="text-xs text-muted font-mono">{partner.vehicle}</p>
+              <p className="text-xs text-muted font-mono">{partner.vehicle || 'Service Vehicle'}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3 font-mono text-xs">
             <a
-              href={`tel:${partner.phone}`}
+              href={partner.phone ? `tel:${partner.phone}` : '#'}
               className="btn-secondary py-1.5 px-3 text-xs min-h-[38px] flex items-center gap-2 bg-paper"
             >
               <span>CALL FIXER</span>
-              <span className="font-bold">{partner.phone}</span>
+              <span className="font-bold">{partner.phone || '+91 98450 11223'}</span>
             </a>
           </div>
         </div>
@@ -469,13 +630,21 @@ export default function LiveTrackingView({
           )}
 
           {/* Action to proceed when work is complete */}
-          {currentStep >= 5 ? (
+          {currentStep === 5 && !paymentConfirmed ? (
+            <button
+              type="button"
+              onClick={() => setShowPaymentModal(true)}
+              className="btn-primary min-h-[44px] w-full sm:w-auto px-6 font-mono text-xs font-bold uppercase tracking-wider"
+            >
+              PROCEED TO PAYMENT →
+            </button>
+          ) : currentStep >= 6 || paymentConfirmed ? (
             <button
               type="button"
               onClick={() => onNavigate('rate-receipt')}
-              className="btn-primary min-h-[44px] w-full sm:w-auto"
+              className="btn-primary min-h-[44px] w-full sm:w-auto px-6 font-mono text-xs font-bold uppercase tracking-wider"
             >
-              Rate Partner &amp; View Digital Receipt →
+              RATE PARTNER &amp; VIEW DIGITAL RECEIPT →
             </button>
           ) : (
             <span className="font-mono text-xs font-bold text-soft uppercase">
@@ -546,6 +715,184 @@ export default function LiveTrackingView({
                 Keep Booking
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 4. SERVICE VERIFICATION OTP POPUP MODAL (SRS FR-C16)           */}
+      {/* Pops up when partner arrives or clicks verify & start service  */}
+      {/* ============================================================== */}
+      {showOtpModal && (
+        <div
+          className="fixed inset-0 z-50 bg-ink/80 flex items-center justify-center p-4 animate-fade-in"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-paper border-2 border-ink p-6 sm:p-8 max-w-lg w-full shadow-hard text-ink space-y-6 relative">
+            <div className="flex items-center justify-between border-b-2 border-ink pb-4">
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 bg-signal inline-block border-2 border-ink" />
+                <span className="font-mono text-xs sm:text-sm font-bold uppercase tracking-wider text-ink">
+                  DOORSTEP VERIFICATION · FIXIT NOW
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowOtpModal(false)}
+                className="font-bold text-lg hover:text-signal transition-colors p-1"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-center space-y-2">
+              <div className="stamp-badge bg-signal text-ink border-ink text-xs inline-block">
+                PARTNER ARRIVED · ACTION REQUIRED
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-display font-extrabold text-ink">
+                Share this OTP with {partner.name || 'Partner'}
+              </h2>
+              <p className="text-sm text-soft font-sans max-w-md mx-auto">
+                Your partner has arrived at your doorstep to begin service. Please provide this 6-digit verification code to start the repair work.
+              </p>
+            </div>
+
+            {/* Giant Monospace 6-Digit OTP Box */}
+            <div className="bg-ink text-signal border-2 border-ink p-6 shadow-hard-signal text-center space-y-2">
+              <span className="font-mono text-xs uppercase tracking-widest text-on-dark block">
+                6-DIGIT VERIFICATION CODE
+              </span>
+              <div className="font-mono text-4xl sm:text-6xl font-black tracking-[0.25em] sm:tracking-[0.35em] text-signal select-all py-1">
+                {activeRequest?.service_otp || '256132'}
+              </div>
+              <span className="font-mono text-[11px] text-on-dark block">
+                The partner enters this code on their terminal to verify and start work
+              </span>
+            </div>
+
+            <div className="p-3.5 bg-concrete border-2 border-ink text-xs text-soft font-mono space-y-1">
+              <div>• ORDER REF: <span className="font-bold text-ink">{activeRequest?.order_number || 'ORD-0428'}</span></div>
+              <div>• PARTNER: <span className="font-bold text-ink">{partner.name || 'Partner'}</span> ({partner.vehicle || 'Service Vehicle'})</div>
+              <div>• DIRECT PAYMENT: Cash or UPI settled directly between you and partner after work is complete.</div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowOtpModal(false)}
+              className="btn-primary w-full min-h-[48px] uppercase font-mono tracking-wider text-sm font-bold shadow-hard"
+            >
+              I have shared the code with partner →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 5. PROCEED TO PAYMENT MODAL (SRS FR-C18)                       */}
+      {/* Allows customer to select payment method and confirm settlement */}
+      {/* ============================================================== */}
+      {showPaymentModal && (
+        <div
+          className="fixed inset-0 z-50 bg-ink/80 flex items-center justify-center p-4 animate-fade-in"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-paper border-2 border-ink p-6 sm:p-8 max-w-lg w-full shadow-hard text-ink space-y-6 relative">
+            <div className="flex items-center justify-between border-b-2 border-ink pb-4">
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 bg-signal inline-block border-2 border-ink" />
+                <span className="font-mono text-xs sm:text-sm font-bold uppercase tracking-wider text-ink">
+                  DIRECT ON-SITE PAYMENT · FIXIT NOW
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                className="font-bold text-lg hover:text-signal transition-colors p-1"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-center space-y-2">
+              <div className="stamp-badge bg-signal text-ink border-ink text-xs inline-block">
+                STEP 5: SERVICE COMPLETED
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-display font-extrabold text-ink">
+                Settle with {partner.name || 'Partner'}
+              </h2>
+              <p className="text-sm text-soft font-sans max-w-md mx-auto">
+                Payment is settled directly between you and your service partner. FixIt Now does not deduct commission or hold your funds.
+              </p>
+            </div>
+
+            {/* Work order summary */}
+            <div className="p-4 bg-concrete border-2 border-ink font-mono text-xs space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-muted uppercase">WORK ORDER:</span>
+                <span className="font-bold text-ink">{activeRequest?.order_number || 'ORD-0428'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted uppercase">SERVICE:</span>
+                <span className="font-bold text-ink">{activeRequest?.service_name || 'Home Repair'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted uppercase">FIXER:</span>
+                <span className="font-bold text-ink">{partner.name || 'Partner'}</span>
+              </div>
+              <div className="flex justify-between items-center border-t border-ink/20 pt-2">
+                <span className="text-muted uppercase">SETTLEMENT:</span>
+                <span className="font-bold text-signal uppercase">Direct On-Site Settle</span>
+              </div>
+            </div>
+
+            {/* Payment Method Selector */}
+            <div className="space-y-2">
+              <label className="font-mono text-xs font-bold uppercase text-ink block">
+                Select Payment Method
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('cash')}
+                  className={`p-3.5 border-2 font-mono text-xs font-bold uppercase flex flex-col items-center gap-1.5 transition-all ${
+                    paymentMethod === 'cash'
+                      ? 'bg-signal text-ink border-ink shadow-hard-sm'
+                      : 'bg-paper text-ink border-ink/40 hover:border-ink'
+                  }`}
+                >
+                  <span className="text-xl">💵</span>
+                  <span>Cash on Delivery</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('upi')}
+                  className={`p-3.5 border-2 font-mono text-xs font-bold uppercase flex flex-col items-center gap-1.5 transition-all ${
+                    paymentMethod === 'upi'
+                      ? 'bg-signal text-ink border-ink shadow-hard-sm'
+                      : 'bg-paper text-ink border-ink/40 hover:border-ink'
+                  }`}
+                >
+                  <span className="text-xl">📱</span>
+                  <span>UPI / QR Code</span>
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setPaymentConfirmed(true);
+                setCurrentStep(6);
+                setShowPaymentModal(false);
+              }}
+              className="btn-primary w-full min-h-[50px] uppercase font-mono tracking-wider text-sm font-bold shadow-hard"
+            >
+              Confirm Payment Completed ✓
+            </button>
           </div>
         </div>
       )}

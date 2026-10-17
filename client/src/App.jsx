@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Component } from 'react';
 import LandingPage from './pages/LandingPage';
 import CustomerPortal from './pages/customer/CustomerPortal';
 import CustomerAuthView from './pages/customer/CustomerAuthView';
@@ -8,6 +8,56 @@ import AdminPortal from './pages/admin/AdminPortal';
 import AdminLoginView from './pages/admin/AdminLoginView';
 import { checkServerHealth } from './services/healthService';
 import { useAuth } from './context/AuthContext';
+
+class PortalErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error('[FixIt Now Portal Error Caught]:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[var(--theme-bg)] flex items-center justify-center p-4 font-mono text-sm text-[var(--theme-text-main)]">
+          <div className="p-6 bg-paper border-2 border-signal shadow-hard space-y-4 text-center max-w-md text-ink">
+            <span className="stamp-badge bg-signal text-ink border-ink text-xs inline-block">
+              RECOVERABLE PORTAL INTERFACE
+            </span>
+            <h2 className="text-xl font-display font-extrabold">Active Session Recovered</h2>
+            <p className="text-xs text-soft font-mono">
+              The portal encountered an unexpected display state. Your account data is completely safe.
+            </p>
+            {this.state.error && (
+              <div className="p-3 bg-concrete border border-signal text-left font-mono text-[11px] text-signal overflow-auto max-h-40 break-all">
+                <div className="font-bold">{this.state.error?.toString()}</div>
+                {this.state.error?.stack && (
+                  <pre className="text-[10px] text-ink mt-1 whitespace-pre-wrap">{this.state.error.stack}</pre>
+                )}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                window.location.hash = '/customer/dashboard';
+                window.location.reload();
+              }}
+              className="btn-primary w-full min-h-[42px] uppercase font-bold text-xs"
+            >
+              Return to Customer Dashboard ↺
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function App() {
   const { role, isAuthenticated, loading, logout } = useAuth();
@@ -27,9 +77,18 @@ export default function App() {
       return 'admin';
     }
     if (
+      hash === 'customer/login' ||
+      hash === 'customer/auth' ||
+      hash === 'customer-auth' ||
+      hash === 'customer-login' ||
+      hash === 'customer/signin' ||
+      hash === 'customer-signin' ||
+      hash === 'login' ||
+      hash === 'signin' ||
       hash.startsWith('customer/login') ||
       hash.startsWith('customer/register') ||
-      hash.startsWith('customer/forgot')
+      hash.startsWith('customer/forgot') ||
+      hash === 'customer/signup'
     ) {
       return 'customer-auth';
     }
@@ -39,7 +98,10 @@ export default function App() {
     if (
       hash.startsWith('partner/login') ||
       hash.startsWith('partner/register') ||
-      hash.startsWith('partner/forgot')
+      hash.startsWith('partner/forgot') ||
+      hash === 'partner/auth' ||
+      hash === 'partner-auth' ||
+      hash === 'partner-login'
     ) {
       return 'partner-auth';
     }
@@ -51,7 +113,7 @@ export default function App() {
 
   const [authMode, setAuthMode] = useState(() => {
     const hash = window.location.hash.replace('#/', '').replace('#', '');
-    if (hash.includes('register')) return 'register';
+    if (hash.includes('register') || hash.includes('signup')) return 'register';
     if (hash.includes('forgot')) return 'forgot';
     return 'login';
   });
@@ -163,10 +225,20 @@ export default function App() {
       } else if (hash === 'admin') {
         setCurrentView('admin');
         setAdminTab('dashboard');
-      } else if (hash === 'customer/login') {
+      } else if (
+        hash === 'customer/login' ||
+        hash === 'customer/auth' ||
+        hash === 'customer-auth' ||
+        hash === 'customer-login' ||
+        hash === 'customer/signin' ||
+        hash === 'customer-signin' ||
+        hash === 'login' ||
+        hash === 'signin' ||
+        hash.startsWith('customer/login')
+      ) {
         setCurrentView('customer-auth');
         setAuthMode('login');
-      } else if (hash === 'customer/register') {
+      } else if (hash === 'customer/register' || hash === 'customer/signup') {
         setCurrentView('customer-auth');
         setAuthMode('register');
       } else if (hash === 'customer/forgot-password' || hash === 'customer/forgot') {
@@ -212,11 +284,24 @@ export default function App() {
     const rawHash = window.location.hash.replace('#/', '').replace('#', '');
 
     // 1. Customer Portal Access Protection
+    const isCustomerAuthRoute =
+      [
+        'customer/login',
+        'customer/register',
+        'customer/signup',
+        'customer/forgot',
+        'customer/forgot-password',
+        'customer/auth',
+        'customer-auth',
+        'customer-login',
+        'customer/signin',
+        'customer-signin',
+        'login',
+        'signin',
+      ].includes(rawHash) || rawHash.startsWith('customer/login');
+
     const isCustomerPortalRoute =
-      (rawHash.startsWith('customer/') &&
-        !['customer/login', 'customer/register', 'customer/forgot', 'customer/forgot-password'].includes(
-          rawHash
-        )) ||
+      (rawHash.startsWith('customer/') && !isCustomerAuthRoute) ||
       rawHash === 'customer';
 
     if (isCustomerPortalRoute) {
@@ -286,19 +371,8 @@ export default function App() {
       }
     }
 
-    // 4. Redirect logged-in users away from auth pages to their respective portals
-    if (['customer/login', 'customer/register'].includes(rawHash)) {
-      if (isAuthenticated) {
-        if (role === 'customer') {
-          setCurrentView('customer');
-          window.location.hash = '/customer/dashboard';
-        } else {
-          setAuthNotice(`! You are currently logged in as ${role}. Please log out to change accounts.`);
-          setCurrentView(role === 'partner' ? 'partner' : 'admin');
-          window.location.hash = role === 'partner' ? '/partner/dashboard' : '/admin/dashboard';
-        }
-      }
-    }
+    // Allow viewing customer auth/login pages directly even if a session exists,
+    // so users can switch accounts or inspect the login screen.
 
     if (['partner/login', 'partner/register'].includes(rawHash)) {
       if (isAuthenticated) {
@@ -450,13 +524,15 @@ export default function App() {
       )}
 
       {currentView === 'customer' && (
-        <CustomerPortal
-          initialTab={customerTab}
-          theme={theme}
-          setTheme={setTheme}
-          onExitPortal={handlePortalLogout}
-          preselectedService={preselectedService}
-        />
+        <PortalErrorBoundary>
+          <CustomerPortal
+            initialTab={customerTab}
+            theme={theme}
+            setTheme={setTheme}
+            onExitPortal={handlePortalLogout}
+            preselectedService={preselectedService}
+          />
+        </PortalErrorBoundary>
       )}
 
       {currentView === 'customer-auth' && (

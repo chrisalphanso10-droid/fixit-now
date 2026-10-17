@@ -133,8 +133,8 @@ export default function IncomingRequestPopup({
               <span className="font-bold text-ink">{address}</span>
             </div>
             <div className="flex items-start gap-1.5 text-[11px]">
-              <span className="text-muted shrink-0">EST. EARNING:</span>
-              <span className="font-bold text-done">Direct Cash / UPI (100% Kept by You)</span>
+              <span className="text-muted shrink-0">CUSTOMER PAYOUT:</span>
+              <span className="font-bold text-done">Direct Cash / UPI from Customer</span>
             </div>
           </div>
         </div>

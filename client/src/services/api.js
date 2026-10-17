@@ -181,10 +181,50 @@ export async function postFormData(endpoint, formData) {
   return response.json();
 }
 
+/**
+ * Perform a DELETE request to the API
+ * @param {string} endpoint
+ * @returns {Promise<any>}
+ */
+export async function del(endpoint) {
+  const primaryUrl = API_BASE_URL ? `${API_BASE_URL}${endpoint}` : endpoint;
+
+  try {
+    const response = await fetch(primaryUrl, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.message || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (err) {
+    if (primaryUrl !== endpoint) {
+      try {
+        const fallbackResponse = await fetch(endpoint, {
+          method: 'DELETE',
+          headers: getAuthHeaders(),
+        });
+        if (fallbackResponse.ok) {
+          return await fallbackResponse.json();
+        }
+      } catch {
+        // ignore
+      }
+    }
+    throw err;
+  }
+}
+
 export default {
   get,
   post,
   put,
+  del,
   postFormData,
 };
+
 

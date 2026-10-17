@@ -17,11 +17,12 @@ export default function RateAndPayView({
   const [submitting, setSubmitting] = useState(false);
   const [completed, setCompleted] = useState(false);
 
-  const partner = activeRequest?.partner || {
-    name: 'Rajesh Kumar',
-    service_name: activeRequest?.service_name || 'Plumbing Repairs',
-    badge: 'Certified Master Plumber',
-    vehicle: 'Bajaj Pulsar (KA-03-HJ-4421)',
+  const rawPartner = activeRequest?.partner || {};
+  const partner = {
+    name: rawPartner.name || activeRequest?.partner_name || 'Rajesh Kumar',
+    service_name: rawPartner.service_name || activeRequest?.service_name || 'Plumbing Repairs',
+    badge: rawPartner.badge || activeRequest?.partner_badge || 'Certified Master Plumber',
+    vehicle: rawPartner.vehicle || activeRequest?.partner_vehicle || 'Bajaj Pulsar (KA-03-HJ-4421)',
   };
 
   const handleSubmit = async (e) => {
@@ -29,7 +30,11 @@ export default function RateAndPayView({
     setSubmitting(true);
     try {
       if (activeRequest) {
-        await submitRequestRating(activeRequest.id, { stars, comment });
+        await submitRequestRating(activeRequest.id, {
+          stars,
+          comment,
+          requestData: activeRequest,
+        });
       }
       setCompleted(true);
       if (onRatingSubmitted) onRatingSubmitted();

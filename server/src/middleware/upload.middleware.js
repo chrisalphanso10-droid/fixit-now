@@ -87,8 +87,51 @@ export const partnerKycUploadFields = kycUpload.fields([
   { name: 'trade_cert', maxCount: 1 },  // PDF (optional)
 ]);
 
+// Request Photo Storage directory
+export const REQUEST_UPLOAD_DIR = path.resolve(__dirname, '../../uploads/requests');
+if (!fs.existsSync(REQUEST_UPLOAD_DIR)) {
+  fs.mkdirSync(REQUEST_UPLOAD_DIR, { recursive: true });
+}
+
+// Storage for request photos
+const requestStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    if (!fs.existsSync(REQUEST_UPLOAD_DIR)) {
+      fs.mkdirSync(REQUEST_UPLOAD_DIR, { recursive: true });
+    }
+    cb(null, REQUEST_UPLOAD_DIR);
+  },
+  filename: (req, file, cb) => {
+    const custId = req.user?.id ? String(req.user.id).slice(0, 8) : 'cust';
+    const randomHex = crypto.randomBytes(6).toString('hex');
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `req_${custId}_${Date.now()}_${randomHex}${ext}`);
+  },
+});
+
+const requestPhotoFilter = (req, file, cb) => {
+  const allowed = ['image/jpeg', 'image/jpg', 'image/png'];
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (allowed.includes(file.mimetype) || ['.jpg', '.jpeg', '.png'].includes(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Uploaded photo must be a valid JPEG or PNG image.'), false);
+  }
+};
+
+export const requestPhotoUpload = multer({
+  storage: requestStorage,
+  fileFilter: requestPhotoFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB max
+  },
+}).single('photo');
+
 export default {
   KYC_UPLOAD_DIR,
+  REQUEST_UPLOAD_DIR,
   kycUpload,
   partnerKycUploadFields,
+  requestPhotoUpload,
 };
+

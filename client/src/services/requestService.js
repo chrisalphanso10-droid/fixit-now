@@ -1,46 +1,35 @@
 /**
  * FixIt Now - Request Service
- * Manages request lifecycle, active tracking simulation, history, cancellations and ratings.
- * Conforms to SRS FR-C6, FR-C7, FR-C10, FR-C14, FR-C17, FR-C18, FR-C19.
+ * Manages request lifecycle, active tracking, history, cancellations and ratings.
+ * Conforms to SRS FR-C6, FR-C7, FR-C10, FR-C14, FR-C17, FR-C19 and docs/PLAN.md Phase 6.
  */
 
-import { mockRequests } from '../mockData';
-import { getEligiblePartnerForTrade } from './partnerService';
+import { get, post, postFormData } from './api';
+import { savePartnerRecentJob, addPartnerRating } from './partnerService';
 
-const REQUESTS_HISTORY_KEY = 'fixit_requests_history';
 const ACTIVE_REQUEST_KEY = 'fixit_active_request';
-
-function getStoredRequests() {
-  try {
-    const raw = localStorage.getItem(REQUESTS_HISTORY_KEY);
-    return raw ? JSON.parse(raw) : mockRequests;
-  } catch {
-    return mockRequests;
-  }
-}
-
-function saveStoredRequests(list) {
-  try {
-    localStorage.setItem(REQUESTS_HISTORY_KEY, JSON.stringify(list));
-  } catch {
-    // ignore
-  }
-}
+const LOCAL_REQUEST_HISTORY_KEY = 'fixit_requests_history';
 
 /**
- * Get current active request in progress (searching or live tracking)
+ * Get current active request from local session cache
  */
 export function getActiveRequest() {
   try {
     const raw = localStorage.getItem(ACTIVE_REQUEST_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const req = JSON.parse(raw);
+    if (['completed', 'cancelled', 'paid', 'service_completed'].includes(req?.status)) {
+      localStorage.removeItem(ACTIVE_REQUEST_KEY);
+      return null;
+    }
+    return req;
   } catch {
     return null;
   }
 }
 
 /**
- * Set active request
+ * Set active request in local session cache
  */
 export function setActiveRequest(request) {
   if (!request) {
@@ -51,7 +40,7 @@ export function setActiveRequest(request) {
 }
 
 /**
- * Create a new service request (SRS FR-C6)
+ * Create a new service request via REST API (SRS FR-C6, FR-C9, FR-C10)
  */
 export async function createServiceRequest({
   service_id,
@@ -61,60 +50,76 @@ export async function createServiceRequest({
   address,
   coordinates,
   photo_url = null,
+  photo_file = null,
 }) {
-  await new Promise((resolve) => setTimeout(resolve, 250));
-
   if (!service_id) throw new Error('Please select a trade service.');
   if (!problem?.trim()) throw new Error('Please enter a brief problem title.');
   if (!description?.trim()) throw new Error('Please describe the fault in detail.');
   if (!address?.trim()) throw new Error('Please provide a service street address.');
 
-  const randomOtp = Math.floor(1000 + Math.random() * 9000).toString();
-  const nextId = 427 + Math.floor(Math.random() * 100);
+  const lat = coordinates?.latitude ?? coordinates?.lat ?? 12.9784;
+  const lon = coordinates?.longitude ?? coordinates?.lng ?? 77.6408;
 
-  const newRequest = {
-    id: nextId,
-    order_number: `ORD-0${nextId}`,
-    customer_id: 1,
-    partner_id: null,
-    service_id: Number(service_id),
-    service_name: service_name || 'Trade Service',
-    problem: problem.trim(),
-    description: description.trim(),
-    address: address.trim(),
-    coordinates: coordinates || { lat: 12.9784, lng: 77.6408 },
-    photo_url: photo_url,
-    status: 'searching', // initial searching state
-    cancel_reason: null,
-    service_otp: randomOtp,
-    created_at: new Date().toISOString(),
-    completed_at: null,
-    partner: null,
-    payment_confirmed: false,
-    rating: null,
-    step_index: 0, // 0: Searching, 1: Accepted, 2: On way, 3: Arrived, 4: Started, 5: Completed, 6: Payment confirmed
-  };
+  let result;
+  if (photo_file instanceof File) {
+    const formData = new FormData();
+    formData.append('service_id', service_id);
+    formData.append('problem', problem.trim());
+    formData.append('description', description.trim());
+    formData.append('address', address.trim());
+    formData.append('latitude', lat);
+    formData.append('longitude', lon);
+    formData.append('photo', photo_file);
+    result = await postFormData('/api/requests', formData);
+  } else {
+    result = await post('/api/requests', {
+      service_id,
+      problem: problem.trim(),
+      description: description.trim(),
+      address: address.trim(),
+      latitude: lat,
+      longitude: lon,
+      photo_url,
+    });
+  }
 
-  setActiveRequest(newRequest);
-  return newRequest;
+  if (result && result.status === 'success' && result.data?.request) {
+    const createdReq = {
+      ...result.data.request,
+      service_name: service_name || result.data.request.service_name || 'Trade Service',
+      order_number: result.data.order_number,
+      step_index: 0, // 0: Searching
+      dispatch_status: result.data.dispatch_status,
+      eligible_partners_count: result.data.eligible_partners_count,
+    };
+
+    setActiveRequest(createdReq);
+    return createdReq;
+  }
+
+  throw new Error(result?.message || 'Failed to create service request.');
 }
 
 /**
- * Assign partner to active request when search succeeds
+ * Assign partner to active request when search succeeds (SRS FR-C13)
  */
-export async function assignMatchedPartner(requestId, serviceId) {
-  await new Promise((resolve) => setTimeout(resolve, 300));
+export async function assignMatchedPartner(requestId, partnerData, extra = {}) {
   const active = getActiveRequest();
-  const partner = await getEligiblePartnerForTrade(serviceId);
 
   const updated = {
-    ...active,
-    partner_id: partner.id,
-    partner: partner,
+    ...(active || {}),
+    id: requestId || active?.id,
+    partner_id: partnerData?.id,
+    partner: partnerData,
     status: 'accepted',
     step_index: 1, // Step 1: Request accepted
-    eta_minutes: partner.estimated_arrival_minutes || 14,
-    distance_km: partner.distance_km || 0.8,
+    eta_minutes: partnerData?.eta_minutes || 14,
+    distance_km: partnerData?.distance_km || 0.8,
+    service_otp: extra?.service_otp || active?.service_otp,
+    order_number: extra?.order_number || active?.order_number,
+    service_name: extra?.service_name || active?.service_name,
+    address: extra?.address || active?.address,
+    problem: extra?.problem || active?.problem,
   };
 
   setActiveRequest(updated);
@@ -137,10 +142,10 @@ export function updateTrackingStep(stepIndex) {
 
   const statusMap = {
     1: 'accepted',
-    2: 'on_the_way',
-    3: 'arrived',
-    4: 'in_progress',
-    5: 'completed',
+    2: 'partner_on_way',
+    3: 'partner_arrived',
+    4: 'service_started',
+    5: 'service_completed',
     6: 'payment_completed',
   };
 
@@ -160,61 +165,108 @@ export function updateTrackingStep(stepIndex) {
 /**
  * Cancel request (SRS FR-C19)
  */
-export async function cancelServiceRequest(requestId, reason) {
-  await new Promise((resolve) => setTimeout(resolve, 200));
+export async function cancelServiceRequest(requestId, reason = 'Cancelled by customer') {
   const active = getActiveRequest();
+  const orderNum =
+    active?.order_number ||
+    `ORD-${String(requestId).replace(/-/g, '').slice(0, 4).toUpperCase()}`;
 
-  const cancelledReq = {
-    ...(active || { id: requestId }),
+  // Mirror cancellation record into partner history
+  savePartnerRecentJob({
+    id: requestId || active?.id || Date.now(),
+    order_number: orderNum,
+    customer_name: active?.customer_name || active?.name || 'Customer',
+    customer_phone: active?.customer_phone || active?.phone || '+91 98765 43210',
+    service_name: active?.service_name || 'Service Call',
+    problem: active?.problem || active?.description || 'Service Work',
+    address: active?.address || 'Customer site location',
     status: 'cancelled',
-    cancel_reason: reason?.trim() || 'Cancelled by customer',
+    amount: 0,
+    cancel_reason: reason,
     completed_at: new Date().toISOString(),
-  };
+    partner_id: active?.partner?.id || active?.partner_id,
+    rating: null,
+  });
 
-  // Add to history
-  const list = getStoredRequests();
-  const existingIdx = list.findIndex((r) => r.id === cancelledReq.id);
-  if (existingIdx !== -1) {
-    list[existingIdx] = cancelledReq;
-  } else {
-    list.unshift(cancelledReq);
+  try {
+    const res = await post(`/api/requests/${requestId}/cancel`, {
+      reason: reason.trim(),
+    });
+    setActiveRequest(null);
+    return res.data;
+  } catch (err) {
+    console.warn('[RequestService] cancelServiceRequest backend call failed:', err.message);
+    setActiveRequest(null);
+    return { id: requestId, status: 'cancelled', cancel_reason: reason };
   }
-  saveStoredRequests(list);
-
-  // Clear active
-  setActiveRequest(null);
-  return cancelledReq;
 }
 
 /**
  * Submit rating for completed partner service (SRS FR-C17)
  */
-export async function submitRequestRating(requestId, { stars, comment }) {
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  const active = getActiveRequest();
+export async function submitRequestRating(requestId, { stars, comment, requestData } = {}) {
+  const active = requestData || getActiveRequest();
+  const numStars = Math.max(1, Math.min(5, Number(stars) || 5));
+  const cleanComment = (comment || 'Service completed successfully.').trim();
+
+  const ratingObj = {
+    stars: numStars,
+    comment: cleanComment,
+  };
+
+  const orderNum =
+    active?.order_number ||
+    `ORD-${String(requestId).replace(/-/g, '').slice(0, 4).toUpperCase()}`;
+
+  // Try real backend API rating endpoint
+  try {
+    await post(`/api/requests/${requestId}/rate`, {
+      stars: numStars,
+      comment: cleanComment,
+    });
+  } catch (err) {
+    console.warn('[RequestService] submitRequestRating backend call failed:', err.message);
+  }
+
+  // 1. Mirror completed work order into partner history with customer rating
+  savePartnerRecentJob({
+    id: requestId || active?.id || Date.now(),
+    order_number: orderNum,
+    customer_name: active?.customer_name || active?.name || 'Customer',
+    customer_phone: active?.customer_phone || active?.phone || '+91 98765 43210',
+    service_name: active?.service_name || 'Service Call',
+    problem: active?.problem || active?.description || 'Service Work',
+    address: active?.address || 'Site Location, Bengaluru',
+    status: 'completed',
+    amount: Number(active?.amount || active?.base_price_estimate || 450.0),
+    payment_mode: 'Direct Cash / UPI (On-site)',
+    completed_at: active?.completed_at || new Date().toISOString(),
+    rating: ratingObj,
+    partner_id: active?.partner?.id || active?.partner_id,
+  });
+
+  // 2. Add customer rating to partner recent ratings scorecard & feedback list
+  addPartnerRating({
+    id: Date.now(),
+    order_id: orderNum,
+    order_number: orderNum,
+    customer_name: active?.customer_name || active?.name || 'Customer',
+    stars: numStars,
+    comment: cleanComment,
+    date: new Date().toISOString(),
+    service_name: active?.service_name || 'Home Service',
+    partner_id: active?.partner?.id || active?.partner_id,
+  });
 
   const finishedReq = {
     ...(active || {}),
     id: requestId || active?.id,
-    status: 'completed',
+    status: 'service_completed',
     payment_confirmed: true,
-    rating: {
-      stars: Number(stars) || 5,
-      comment: comment?.trim() || 'Service completed successfully.',
-    },
+    rating: ratingObj,
     completed_at: active?.completed_at || new Date().toISOString(),
   };
 
-  const list = getStoredRequests();
-  const existingIdx = list.findIndex((r) => r.id === finishedReq.id);
-  if (existingIdx !== -1) {
-    list[existingIdx] = finishedReq;
-  } else {
-    list.unshift(finishedReq);
-  }
-  saveStoredRequests(list);
-
-  // Clear active request
   setActiveRequest(null);
   return finishedReq;
 }
@@ -223,26 +275,44 @@ export async function submitRequestRating(requestId, { stars, comment }) {
  * Get request history with optional status filter (SRS FR-C7)
  */
 export async function getRequestHistory(filter = 'all') {
-  await new Promise((resolve) => setTimeout(resolve, 150));
-  const list = getStoredRequests();
-  if (filter === 'completed') {
-    return list.filter((r) => r.status === 'completed' || r.status === 'payment_completed');
+  try {
+    const res = await get(`/api/requests?filter=${encodeURIComponent(filter)}`);
+    if (res && res.status === 'success' && Array.isArray(res.data)) {
+      return res.data;
+    }
+  } catch (err) {
+    console.warn('[RequestService] getRequestHistory backend call failed:', err.message);
   }
-  if (filter === 'cancelled') {
-    return list.filter((r) => r.status === 'cancelled');
-  }
-  return list;
+
+  return [];
 }
 
 /**
- * Get request by ID
+ * Get request by ID (SRS FR-C13)
  */
 export async function getRequestById(id) {
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  const list = getStoredRequests();
-  const found = list.find((r) => r.id === Number(id));
-  if (found) return found;
+  try {
+    const res = await get(`/api/requests/${id}`);
+    if (res && res.status === 'success' && res.data) {
+      return res.data;
+    }
+  } catch (err) {
+    console.warn('[RequestService] getRequestById backend call failed:', err.message);
+  }
+
   const active = getActiveRequest();
-  if (active && active.id === Number(id)) return active;
+  if (active && String(active.id) === String(id)) return active;
   return null;
 }
+
+export default {
+  getActiveRequest,
+  setActiveRequest,
+  createServiceRequest,
+  assignMatchedPartner,
+  updateTrackingStep,
+  cancelServiceRequest,
+  submitRequestRating,
+  getRequestHistory,
+  getRequestById,
+};

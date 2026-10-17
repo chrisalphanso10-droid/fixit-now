@@ -4,6 +4,8 @@ import authRoutes from './auth.routes.js';
 import adminRoutes from './admin.routes.js';
 import serviceRoutes from './service.routes.js';
 import partnerRoutes from './partner.routes.js';
+import customerRoutes from './customer.routes.js';
+import requestRoutes from './request.routes.js';
 
 const router = Router();
 
@@ -21,7 +23,15 @@ router.use('/services', serviceRoutes);
 
 // Mount Partner Onboarding, Subscriptions & KYC Routes
 router.use('/partner', partnerRoutes);
+router.use('/partners', partnerRoutes);
 router.use('/plans', partnerRoutes);
 
+// Mount Customer Portal Routes (Profile & Saved Addresses)
+router.use('/customer', customerRoutes);
+
+// Mount Request Lifecycle & Matching Routes
+router.use('/requests', requestRoutes);
+
 export default router;
+
 

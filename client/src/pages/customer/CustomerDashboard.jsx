@@ -75,7 +75,7 @@ export default function CustomerDashboard({
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="space-y-2">
             <h1 className="text-3xl sm:text-5xl font-display font-extrabold tracking-tight text-ink">
-              Welcome back, {customer?.name?.split(' ')[0] || 'Customer'}
+              Welcome back, {customer?.name ? String(customer.name).split(' ')[0] : 'Customer'}
             </h1>
             <p className="text-sm sm:text-base text-soft max-w-xl font-sans">
               Immediate home repair dispatch. Verified fixers arrive in 15–25 minutes. No
@@ -102,24 +102,24 @@ export default function CustomerDashboard({
       {/* ============================================================== */}
       {/* 2. ACTIVE LIVE ORDER BANNER (if an active job exists)          */}
       {/* ============================================================== */}
-      {activeRequest && (
+      {activeRequest && !['completed', 'cancelled', 'paid', 'service_completed'].includes(activeRequest.status) && (
         <div className="p-6 bg-ink text-paper border-2 border-signal shadow-hard-signal space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-[#3A3F47] pb-3">
             <div className="flex items-center gap-2.5">
               <span className="w-2.5 h-2.5 rounded-full bg-signal animate-ping" />
               <span className="font-mono text-xs font-bold uppercase tracking-wider text-signal">
-                ACTIVE JOB IN PROGRESS: {activeRequest.order_number}
+                ACTIVE JOB IN PROGRESS: {activeRequest?.order_number || 'ORD-0427'}
               </span>
             </div>
             <span className="font-mono text-xs text-on-dark uppercase">
-              STATUS: {activeRequest.status.replace(/_/g, ' ')}
+              STATUS: {String(activeRequest?.status || '').replace(/_/g, ' ')}
             </span>
           </div>
 
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-display font-extrabold text-paper">
-                {activeRequest.service_name}
+                {activeRequest?.service_name || 'Home Repair'}
               </h2>
               <p className="text-sm text-on-dark mt-0.5 line-clamp-1">
                 {activeRequest.problem}
@@ -261,7 +261,7 @@ export default function CustomerDashboard({
                     <div className="text-right hidden sm:block font-mono text-xs">
                       <span className="text-[var(--theme-text-muted)] block">PARTNER:</span>
                       <span className="font-bold text-[var(--theme-text-main)]">
-                        {req.partner.name}
+                        {req.partner.name || req.partner_name || 'Partner'}
                       </span>
                     </div>
                   )}

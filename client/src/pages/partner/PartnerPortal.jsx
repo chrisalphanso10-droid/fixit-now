@@ -30,6 +30,7 @@ import {
 } from '../../services/partnerService';
 import { logoutPartner } from '../../services/authService';
 import { useAuth } from '../../context/AuthContext';
+import socketService from '../../services/socketService';
 
 export default function PartnerPortal({
   initialTab = 'dashboard',
@@ -114,6 +115,54 @@ export default function PartnerPortal({
     refreshPartnerData();
   }, []);
 
+  // Real-time Socket.IO dispatch integration (Phase 6)
+  useEffect(() => {
+    if (!partner?.id) return;
+
+    socketService.registerPartner(partner.id);
+
+    const unsubIncoming = socketService.onIncomingRequest((data) => {
+      // Only show popup if online
+      if (online && data?.job) {
+        setIncomingJob(data.job);
+      }
+    });
+
+    const unsubTimeout = socketService.onRequestTimeout((data) => {
+      setIncomingJob((cur) => {
+        if (
+          cur &&
+          (String(cur.id) === String(data?.requestId) ||
+            String(cur.request_id) === String(data?.requestId))
+        ) {
+          showToast('Job offer timed out. You remain online.');
+          return null;
+        }
+        return cur;
+      });
+    });
+
+    const unsubCancelled = socketService.onRequestCancelled((data) => {
+      setIncomingJob((cur) => {
+        if (
+          cur &&
+          (String(cur.id) === String(data?.requestId) ||
+            String(cur.request_id) === String(data?.requestId))
+        ) {
+          showToast('Customer cancelled the request.');
+          return null;
+        }
+        return cur;
+      });
+    });
+
+    return () => {
+      unsubIncoming();
+      unsubTimeout();
+      unsubCancelled();
+    };
+  }, [partner?.id, online]);
+
   const handleSelectTab = (tab) => {
     setActiveTab(tab);
     window.location.hash = `/partner/${tab}`;
@@ -168,19 +217,36 @@ export default function PartnerPortal({
     setIncomingJob(mock);
   };
 
-  // Accept incoming job
+  // Accept incoming job (SRS FR-P9)
   const handleAcceptIncomingJob = async (job) => {
+    const reqId = job.id || job.request_id;
     setIncomingJob(null);
+    try {
+      if (partner?.id && reqId) {
+        socketService.respondToJob(reqId, partner.id, 'accept');
+      }
+    } catch (socketErr) {
+      console.warn('[Socket Accept Warning]:', socketErr.message);
+    }
     const accepted = await acceptIncomingJob(job);
     setActiveJobState(accepted);
     showToast(`✓ Work order ${accepted.order_number} accepted! Navigating to active trip.`);
     handleSelectTab('active-job');
   };
 
-  // Decline incoming job
+  // Decline incoming job (SRS FR-P7)
   const handleDeclineIncomingJob = async (reason) => {
+    const currentJob = incomingJob;
+    const reqId = currentJob?.id || currentJob?.request_id;
     setIncomingJob(null);
-    await declineIncomingJob(incomingJob?.id);
+    if (currentJob && reqId && partner?.id) {
+      try {
+        socketService.respondToJob(reqId, partner.id, 'decline', reason);
+      } catch (socketErr) {
+        console.warn('[Socket Decline Warning]:', socketErr.message);
+      }
+      await declineIncomingJob(reqId);
+    }
     showToast(reason === 'TIMEOUT_EXPIRED' ? 'Job request timed out. You remain online.' : 'Job request declined.');
   };
 
@@ -194,7 +260,7 @@ export default function PartnerPortal({
     setActiveJobState(null);
     refreshPartnerData();
     if (settlement) {
-      showToast(`✓ Work order closed. +₹${settlement.amount} added to earnings ledger.`);
+      showToast('✓ Work order closed. Payment received and job completed.');
     }
   };
 

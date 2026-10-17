@@ -58,8 +58,8 @@ export default function PartnerLayout({
     },
     {
       id: 'earnings',
-      label: 'Earnings & Payouts',
-      shortLabel: 'Earnings',
+      label: 'Customer Payouts',
+      shortLabel: 'Payouts',
       icon: (
         <svg viewBox="0 0 24 24" className="w-5 h-5 fill-none stroke-current stroke-2" aria-hidden="true">
           <line x1="12" y1="1" x2="12" y2="23" />

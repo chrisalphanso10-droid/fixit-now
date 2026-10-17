@@ -141,7 +141,7 @@ export default function CustomerLayout({
             <div className="flex items-center justify-between">
               <span className="text-[var(--theme-text-muted)]">NO.</span>
               <span className="font-bold">
-                {activeRequest ? activeRequest.order_number : '0427'}
+                {activeRequest?.order_number || '0427'}
               </span>
             </div>
           </div>
@@ -182,10 +182,10 @@ export default function CustomerLayout({
               </div>
               <div>
                 <span className="font-display font-extrabold text-sm block leading-tight">
-                  {activeRequest.service_name}
+                  {activeRequest.service_name || 'Home Repair'}
                 </span>
                 <span className="font-mono text-[11px] text-soft block uppercase mt-0.5">
-                  STATUS: {activeRequest.status.replace(/_/g, ' ')}
+                  STATUS: {String(activeRequest.status || '').replace(/_/g, ' ')}
                 </span>
               </div>
               <button
@@ -275,7 +275,7 @@ export default function CustomerLayout({
               <span className="uppercase">PORTAL</span>
               <span>/</span>
               <span className="font-bold text-[var(--theme-text-main)] uppercase">
-                {activeTab.replace(/-/g, ' ')}
+                {String(activeTab || 'dashboard').replace(/-/g, ' ')}
               </span>
             </div>
           </div>

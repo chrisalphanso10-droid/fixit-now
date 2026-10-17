@@ -133,10 +133,11 @@ export default function PartnerDashboard({
           </div>
 
           <div className="p-3 bg-[var(--theme-bg)] border border-[var(--theme-border)]">
-            <span className="text-[var(--theme-text-soft)] text-[10px] block uppercase">TODAY&apos;S EARNINGS:</span>
-            <span className="font-display font-extrabold text-xl sm:text-2xl text-done mt-0.5 block">
-              ₹{todayEarnings.toFixed(2)}
+            <span className="text-[var(--theme-text-soft)] text-[10px] block uppercase">PAYMENT STATUS:</span>
+            <span className="font-display font-extrabold text-base sm:text-lg text-done mt-0.5 block">
+              ✓ Payment Received
             </span>
+            <span className="text-[9px] text-[var(--theme-text-soft)] block font-bold mt-0.5">Job Completed</span>
           </div>
 
           <div className="p-3 bg-[var(--theme-bg)] border border-[var(--theme-border)]">

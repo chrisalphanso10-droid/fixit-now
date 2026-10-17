@@ -3,9 +3,11 @@
  * Connects to PostgreSQL connection pool, starts HTTP listener, handles graceful shutdown.
  */
 
+import http from 'http';
 import config from './config/index.js';
 import db from './config/db.js';
 import app from './app.js';
+import { initSocketServer } from './services/socket.service.js';
 
 const PORT = config.port || 5000;
 
@@ -19,9 +21,13 @@ async function startServer() {
     console.warn(`Ensure PostgreSQL is running and DATABASE_URL in server/.env is correct.`);
   }
 
-  const server = app.listen(PORT, () => {
+  const httpServer = http.createServer(app);
+  initSocketServer(httpServer);
+
+  const server = httpServer.listen(PORT, () => {
     console.log(`===============================================`);
     console.log(`FixIt Now Backend Server running on port ${PORT}`);
+    console.log(`Socket.IO Engine:  Ready for dispatches & rooms`);
     console.log(`Health Diagnostic: http://localhost:${PORT}/api/health`);
     console.log(`Environment:       ${config.nodeEnv}`);
     console.log(`===============================================`);

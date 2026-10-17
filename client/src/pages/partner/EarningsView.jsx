@@ -13,10 +13,65 @@ export default function EarningsView({ partner }) {
   const [filterMode, setFilterMode] = useState('ALL'); // 'ALL' | 'CASH' | 'UPI'
 
   useEffect(() => {
-    getPartnerEarnings(partner?.id || 101).then((data) => {
-      setEarningsData(data);
+    let isMounted = true;
+    const loadEarnings = async () => {
+      const data = await getPartnerEarnings(partner?.id || 101);
+      if (!isMounted) return;
+
+      // Merge newly completed jobs from localStorage
+      const extraEntries = [];
+      try {
+        const rawJobs = localStorage.getItem('fixit_partner_recent_jobs');
+        if (rawJobs) {
+          const parsed = JSON.parse(rawJobs);
+          if (Array.isArray(parsed)) {
+            for (const j of parsed) {
+              if (j.status === 'completed' || j.status === 'paid' || j.amount > 0) {
+                extraEntries.push({
+                  id: j.id,
+                  order_number: j.order_number,
+                  customer_name: j.customer_name,
+                  service_name: j.service_name,
+                  problem: j.problem,
+                  amount: j.amount || 450.0,
+                  payment_mode: j.payment_mode || 'Direct Cash / UPI (On-site)',
+                  date: j.completed_at || new Date().toISOString(),
+                  status: 'settled',
+                });
+              }
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      const existingLedger = data.ledger || [];
+      const seen = new Set();
+      const combinedLedger = [];
+      for (const item of [...extraEntries, ...existingLedger]) {
+        const key = item.order_number || String(item.id);
+        if (!seen.has(key)) {
+          seen.add(key);
+          combinedLedger.push(item);
+        }
+      }
+
+      setEarningsData({
+        ...data,
+        ledger: combinedLedger,
+      });
       setLoading(false);
-    });
+    };
+
+    loadEarnings();
+    window.addEventListener('storage', loadEarnings);
+    window.addEventListener('fixit_partner_ratings_updated', loadEarnings);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('storage', loadEarnings);
+      window.removeEventListener('fixit_partner_ratings_updated', loadEarnings);
+    };
   }, [partner?.id]);
 
   if (loading || !earningsData) {
@@ -31,7 +86,6 @@ export default function EarningsView({ partner }) {
   const todayEarnings = earningsData.today_earnings ?? 0.0;
   const totalJobs = earningsData.total_jobs ?? 0;
   const thisWeekEarnings = earningsData.this_week_earnings ?? 0.0;
-  const platformSaved = Math.round(totalEarnings * 0.2); // 20% commission on other apps
 
   const ledger = earningsData.ledger || [];
   const filteredLedger = ledger.filter((entry) => {
@@ -52,38 +106,38 @@ export default function EarningsView({ partner }) {
             <div className="flex items-center gap-2 mb-1">
               <span className="w-2.5 h-2.5 bg-signal inline-block" />
               <span className="font-mono text-xs font-bold uppercase tracking-widest text-signal">
-                FINANCIAL SETTLEMENT LEDGER
+                CUSTOMER PAYOUTS &amp; RECEIPTS
               </span>
             </div>
             <h1 className="font-display font-extrabold text-2xl sm:text-3xl text-[var(--theme-text-main)]">
-              Partner Earnings &amp; Settlements
+              Customer Payouts &amp; Settlements
             </h1>
           </div>
 
           <div className="border-2 border-done bg-done text-paper px-3 py-1 font-mono text-xs font-bold uppercase shadow-hard-sm self-start sm:self-auto">
-            0% COMMISSION · 100% DIRECT
+            DIRECT CUSTOMER SETTLEMENTS
           </div>
         </div>
 
         <p className="font-mono text-xs sm:text-sm text-[var(--theme-text-soft)] leading-relaxed">
-          All service repair payments are collected directly on-site by you through customer cash or your personal UPI QR code. FixIt Now takes 0% cut.
+          Payouts for service work are received directly from customers upon job completion via customer cash or direct UPI. FixIt Now takes 0% cut.
         </p>
       </div>
 
-      {/* 4 Financial Stat Metric Cards */}
+      {/* 4 Payout Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div
           className="bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] p-4 shadow-hard-sm"
           style={{ borderRadius: 0 }}
         >
           <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--theme-text-soft)] block">
-            TODAY&apos;S SETTLEMENTS
+            TODAY&apos;S STATUS
           </span>
           <div className="font-display font-extrabold text-2xl sm:text-3xl text-signal mt-1">
-            ₹{todayEarnings.toFixed(2)}
+            {earningsData.today_jobs ?? 0}
           </div>
           <span className="font-mono text-[10px] text-[var(--theme-text-muted)] block mt-1">
-            {earningsData.today_jobs ?? 0} jobs closed today
+            Jobs Completed · Payment Received
           </span>
         </div>
 
@@ -92,13 +146,13 @@ export default function EarningsView({ partner }) {
           style={{ borderRadius: 0 }}
         >
           <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--theme-text-soft)] block">
-            THIS WEEK
+            SETTLEMENT METHOD
           </span>
           <div className="font-display font-extrabold text-2xl sm:text-3xl text-[var(--theme-text-main)] mt-1">
-            ₹{thisWeekEarnings.toFixed(2)}
+            DIRECT
           </div>
           <span className="font-mono text-[10px] text-[var(--theme-text-muted)] block mt-1">
-            Direct on-site settlements
+            Payment received on-site
           </span>
         </div>
 
@@ -107,13 +161,13 @@ export default function EarningsView({ partner }) {
           style={{ borderRadius: 0 }}
         >
           <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--theme-text-soft)] block">
-            TOTAL LIFETIME EARNINGS
+            COMPLETED WORK ORDERS
           </span>
           <div className="font-display font-extrabold text-2xl sm:text-3xl text-[var(--theme-text-main)] mt-1">
-            ₹{totalEarnings.toFixed(2)}
+            {totalJobs}
           </div>
           <span className="font-mono text-[10px] text-[var(--theme-text-muted)] block mt-1">
-            {totalJobs} jobs successfully fixed
+            Jobs Completed · Payment Received
           </span>
         </div>
 
@@ -122,13 +176,13 @@ export default function EarningsView({ partner }) {
           style={{ borderRadius: 0 }}
         >
           <span className="font-mono text-[10px] uppercase tracking-wider text-done block font-bold">
-            0% COMM. SAVINGS
+            PAYOUT STATUS
           </span>
           <div className="font-display font-extrabold text-2xl sm:text-3xl text-done mt-1">
-            +₹{platformSaved.toLocaleString('en-IN')}
+            100% SETTLED
           </div>
           <span className="font-mono text-[10px] text-[var(--theme-text-muted)] block mt-1">
-            Saved vs 20% commission apps
+            Payment received · Job completed
           </span>
         </div>
       </div>
@@ -141,7 +195,7 @@ export default function EarningsView({ partner }) {
         <div className="border-b-2 border-[var(--theme-border)] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[var(--theme-bg)]">
           <div className="flex items-center gap-2">
             <span className="font-mono text-xs font-bold uppercase tracking-wider text-[var(--theme-text-main)]">
-              ITEMIZED SETTLEMENT LOG ({filteredLedger.length})
+              CUSTOMER PAYOUT LOG ({filteredLedger.length})
             </span>
           </div>
 
@@ -210,20 +264,20 @@ export default function EarningsView({ partner }) {
                 </div>
               </div>
 
-              <div className="text-right self-end sm:self-center">
-                <div className="font-display font-extrabold text-xl text-done">
-                  +₹{entry.amount?.toFixed(2)}
+              <div className="text-right self-end sm:self-center space-y-1">
+                <div className="inline-block px-2.5 py-0.5 border border-done bg-done text-paper font-mono text-[11px] font-bold uppercase tracking-wider">
+                  ✓ Payment Received
                 </div>
-                <span className="text-[10px] font-bold uppercase text-[var(--theme-text-muted)]">
-                  100% Payout Received
-                </span>
+                <div className="text-[10px] font-bold uppercase text-[var(--theme-text-soft)]">
+                  Job Completed
+                </div>
               </div>
             </div>
           ))}
 
           {filteredLedger.length === 0 && (
             <div className="p-8 text-center text-[var(--theme-text-soft)]">
-              No settlements found for selected filter.
+              No customer payouts found for selected filter.
             </div>
           )}
         </div>

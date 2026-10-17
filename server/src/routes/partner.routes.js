@@ -14,11 +14,31 @@ import {
   getPartnerDashboard,
   reviewPartnerKyc,
   togglePartnerOnline,
+  getPartnerRatings,
 } from '../controllers/partner.controller.js';
 import { authenticateToken, requireRole } from '../middleware/auth.middleware.js';
+import { verifyToken } from '../services/token.service.js';
 import { partnerKycUploadFields } from '../middleware/upload.middleware.js';
 
 const router = Router();
+
+const optionalPartnerAuth = (req, res, next) => {
+  const authHeader = req.headers['authorization'] || req.headers['x-access-token'];
+  if (authHeader) {
+    try {
+      let token = authHeader;
+      if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7).trim();
+      }
+      if (token) {
+        req.user = verifyToken(token);
+      }
+    } catch {
+      // ignore invalid token for ratings
+    }
+  }
+  next();
+};
 
 // =============================================================================
 // 1. Subscription Plans (Public / Partner)
@@ -82,6 +102,12 @@ router.put(
   authenticateToken,
   requireRole('partner'),
   togglePartnerOnline
+);
+
+router.get(
+  '/ratings',
+  optionalPartnerAuth,
+  getPartnerRatings
 );
 
 // =============================================================================

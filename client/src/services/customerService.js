@@ -1,66 +1,78 @@
 /**
  * FixIt Now - Customer Service
- * Handles profile fetching/updating and saved addresses CRUD.
+ * Handles profile fetching/updating and saved addresses CRUD via REST API.
  * Conforms to SRS FR-C8 and FR-C9.
  */
 
-import { mockCustomers, mockSavedAddresses } from '../mockData';
+import { get, put, post, del } from './api';
 import { getCurrentCustomer } from './authService';
 
-const ADDRESSES_KEY = 'fixit_customer_saved_addresses';
-const PROFILE_KEY = 'fixit_customer_profile';
-
-function getStoredAddresses() {
-  try {
-    const raw = localStorage.getItem(ADDRESSES_KEY);
-    return raw ? JSON.parse(raw) : mockSavedAddresses;
-  } catch {
-    return mockSavedAddresses;
-  }
-}
-
-function saveStoredAddresses(list) {
-  try {
-    localStorage.setItem(ADDRESSES_KEY, JSON.stringify(list));
-  } catch {
-    // ignore
-  }
-}
-
 /**
- * Get customer profile
+ * Get customer profile (SRS FR-C8)
  */
 export async function getCustomerProfile() {
-  await new Promise((resolve) => setTimeout(resolve, 150));
   try {
-    const raw = localStorage.getItem(PROFILE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {
-    // fallback
+    const res = await get('/api/customer/profile');
+    if (res && res.status === 'success' && res.data) {
+      // Keep session updated
+      const current = getCurrentCustomer();
+      if (current) {
+        const merged = { ...current, ...res.data };
+        localStorage.setItem('fixit_user', JSON.stringify(merged));
+        localStorage.setItem('fixit_customer_user', JSON.stringify(merged));
+      }
+      return res.data;
+    }
+  } catch (err) {
+    console.warn('[CustomerService] getCustomerProfile backend call failed, fallback to local session:', err.message);
   }
+
   const current = getCurrentCustomer();
-  return current || mockCustomers[0];
+  return (
+    current || {
+      name: 'Customer',
+      phone: '+91 98450 12345',
+      address: '100ft Road, Indiranagar, Bengaluru',
+      email: 'customer@example.com',
+    }
+  );
 }
 
 /**
  * Update customer profile (SRS FR-C8)
  */
 export async function updateCustomerProfile(profileData) {
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  if (!profileData.name?.trim()) throw new Error('Name cannot be empty.');
-  if (!profileData.phone?.trim()) throw new Error('Phone cannot be empty.');
-  if (!profileData.address?.trim()) throw new Error('Address cannot be empty.');
+  if (!profileData.name?.trim()) throw new Error('Full name cannot be empty.');
+  if (!profileData.phone?.trim()) throw new Error('Phone number cannot be empty.');
+  if (!profileData.address?.trim()) throw new Error('Street address cannot be empty.');
 
-  const current = await getCustomerProfile();
+  try {
+    const res = await put('/api/customer/profile', {
+      name: profileData.name.trim(),
+      phone: profileData.phone.trim(),
+      address: profileData.address.trim(),
+    });
+
+    if (res && res.status === 'success' && res.data) {
+      const current = getCurrentCustomer();
+      const updated = { ...current, ...res.data };
+      localStorage.setItem('fixit_user', JSON.stringify(updated));
+      localStorage.setItem('fixit_customer_user', JSON.stringify(updated));
+      return res.data;
+    }
+  } catch (err) {
+    console.warn('[CustomerService] updateCustomerProfile backend call failed, fallback to local:', err.message);
+  }
+
+  const current = getCurrentCustomer();
   const updated = {
     ...current,
     name: profileData.name.trim(),
     phone: profileData.phone.trim(),
     address: profileData.address.trim(),
-    coordinates: profileData.coordinates || current.coordinates,
   };
-
-  localStorage.setItem(PROFILE_KEY, JSON.stringify(updated));
+  localStorage.setItem('fixit_user', JSON.stringify(updated));
+  localStorage.setItem('fixit_customer_user', JSON.stringify(updated));
   return updated;
 }
 
@@ -68,71 +80,73 @@ export async function updateCustomerProfile(profileData) {
  * Get all saved addresses for current customer (SRS FR-C9)
  */
 export async function getSavedAddresses() {
-  await new Promise((resolve) => setTimeout(resolve, 150));
-  return getStoredAddresses();
+  try {
+    const res = await get('/api/customer/addresses');
+    if (res && res.status === 'success' && Array.isArray(res.data)) {
+      return res.data;
+    }
+  } catch (err) {
+    console.warn('[CustomerService] getSavedAddresses backend call failed, fallback to empty/local:', err.message);
+  }
+
+  return [];
 }
 
 /**
- * Add a new saved address
+ * Add a new saved address (SRS FR-C9)
  */
-export async function addSavedAddress({ label, address, is_default = false }) {
-  await new Promise((resolve) => setTimeout(resolve, 200));
+export async function addSavedAddress({ label, address, is_default = false, latitude, longitude }) {
   if (!label?.trim()) throw new Error('Address label (e.g. Home, Office) is required.');
   if (!address?.trim()) throw new Error('Street address is required.');
 
-  const addresses = getStoredAddresses();
-  if (is_default) {
-    addresses.forEach((a) => {
-      a.is_default = false;
-    });
-  }
-
-  const newAddress = {
-    id: Date.now(),
-    customer_id: 1,
+  const res = await post('/api/customer/addresses', {
     label: label.trim(),
     address: address.trim(),
-    coordinates: { lat: 12.9784 + (Math.random() - 0.5) * 0.01, lng: 77.6408 + (Math.random() - 0.5) * 0.01 },
-    is_default: Boolean(is_default) || addresses.length === 0,
-  };
+    is_default: Boolean(is_default),
+    latitude,
+    longitude,
+  });
 
-  addresses.push(newAddress);
-  saveStoredAddresses(addresses);
-  return newAddress;
-}
-
-/**
- * Update existing saved address
- */
-export async function updateSavedAddress(id, { label, address, is_default }) {
-  await new Promise((resolve) => setTimeout(resolve, 200));
-  const addresses = getStoredAddresses();
-  const index = addresses.findIndex((a) => a.id === id);
-  if (index === -1) throw new Error('Address not found.');
-
-  if (is_default) {
-    addresses.forEach((a) => {
-      a.is_default = false;
-    });
+  if (res && res.status === 'success' && res.data) {
+    return res.data;
   }
 
-  addresses[index] = {
-    ...addresses[index],
-    label: label?.trim() || addresses[index].label,
-    address: address?.trim() || addresses[index].address,
-    is_default: is_default !== undefined ? Boolean(is_default) : addresses[index].is_default,
-  };
-
-  saveStoredAddresses(addresses);
-  return addresses[index];
+  throw new Error(res?.message || 'Failed to save address.');
 }
 
 /**
- * Delete a saved address
+ * Update existing saved address (SRS FR-C9)
+ */
+export async function updateSavedAddress(id, { label, address, is_default }) {
+  const res = await put(`/api/customer/addresses/${id}`, {
+    label: label?.trim(),
+    address: address?.trim(),
+    is_default: is_default !== undefined ? Boolean(is_default) : undefined,
+  });
+
+  if (res && res.status === 'success' && res.data) {
+    return res.data;
+  }
+
+  throw new Error(res?.message || 'Failed to update address.');
+}
+
+/**
+ * Delete a saved address (SRS FR-C9)
  */
 export async function deleteSavedAddress(id) {
-  await new Promise((resolve) => setTimeout(resolve, 150));
-  const addresses = getStoredAddresses().filter((a) => a.id !== id);
-  saveStoredAddresses(addresses);
-  return { success: true };
+  const res = await del(`/api/customer/addresses/${id}`);
+  if (res && res.status === 'success') {
+    return { success: true };
+  }
+  throw new Error(res?.message || 'Failed to delete address.');
 }
+
+export default {
+  getCustomerProfile,
+  updateCustomerProfile,
+  getSavedAddresses,
+  addSavedAddress,
+  updateSavedAddress,
+  deleteSavedAddress,
+};

@@ -10,6 +10,7 @@ import {
   advanceJobStep,
   simulateCustomerCancel,
 } from '../../services/partnerService';
+import { requestOtpPrompt } from '../../services/socketService';
 
 export default function ActiveJobView({
   activeJob,
@@ -354,7 +355,12 @@ export default function ActiveJobView({
               <button
                 type="button"
                 disabled={loading}
-                onClick={() => setOtpModalOpen(true)}
+                onClick={() => {
+                  if (activeJob?.id) {
+                    requestOtpPrompt(activeJob.id);
+                  }
+                  setOtpModalOpen(true);
+                }}
                 className="btn-primary w-full sm:w-auto min-h-[48px] px-8 text-sm uppercase tracking-wider font-bold shadow-hard"
               >
                 ENTER SERVICE OTP &amp; START SERVICE →
@@ -415,28 +421,28 @@ export default function ActiveJobView({
             <form onSubmit={handleVerifyOtp} className="space-y-4">
               <div>
                 <h3 className="font-display font-extrabold text-2xl text-ink">
-                  Enter 4-Digit Service OTP
+                  Enter 6-Digit Service OTP
                 </h3>
                 <p className="text-xs text-muted mt-1 leading-relaxed">
-                  Ask customer <strong>{activeJob.customer_name}</strong> for the 4-digit code shown on their tracking screen to authenticate arrival.
+                  Ask customer <strong>{activeJob.customer_name || 'Customer'}</strong> for the 6-digit verification passcode shown on their live tracking screen to verify arrival and begin the repair.
                 </p>
               </div>
 
-              {/* Demo Hint Banner */}
-              <div className="p-3 bg-concrete border border-ink text-xs">
-                <span className="font-bold text-signal block mb-0.5">SAMPLE DATA HINT:</span>
-                The service OTP for this demo work order is <span className="font-bold text-ink text-sm">8392</span>.
-              </div>
+              {error && (
+                <div className="p-3 bg-concrete border-2 border-signal text-signal text-xs font-mono font-bold">
+                  {error}
+                </div>
+              )}
 
               <div>
                 <input
                   type="text"
                   required
-                  maxLength={4}
+                  maxLength={6}
                   value={otpInput}
-                  onChange={(e) => setOtpInput(e.target.value)}
-                  placeholder="8392"
-                  className="w-full min-h-[48px] px-4 border-2 border-ink bg-paper text-ink font-mono text-2xl tracking-[0.5em] text-center focus:outline-none focus:border-signal"
+                  onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))}
+                  placeholder="------"
+                  className="w-full min-h-[48px] px-4 border-2 border-ink bg-paper text-ink font-mono text-2xl tracking-[0.4em] text-center focus:outline-none focus:border-signal"
                 />
               </div>
 
@@ -506,18 +512,14 @@ export default function ActiveJobView({
                   <span className="text-muted">PAYMENT MODE:</span>
                   <span className="font-bold text-ink">{settlementReceipt.payment_mode}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted">PLATFORM COMMISSION:</span>
-                  <span className="font-bold text-done">₹0.00 (0% Flat-Rate)</span>
-                </div>
-                <div className="border-t border-ink/20 pt-2 flex justify-between text-base font-bold">
-                  <span>AMOUNT KEPT BY PARTNER:</span>
-                  <span className="text-done">₹{settlementReceipt.amount?.toFixed(2)}</span>
+                <div className="border-t border-ink/20 pt-2 flex justify-between text-sm font-bold">
+                  <span>PAYMENT STATUS:</span>
+                  <span className="text-done">✓ Payment Received · Job Completed</span>
                 </div>
               </div>
 
               <p className="text-[11px] text-muted leading-relaxed">
-                This transaction has been added to your earnings ledger. You are now free and available on the dispatch radar for the next booking.
+                Direct settlement confirmed with customer. You are now free and available on the dispatch radar for the next booking.
               </p>
 
               <button

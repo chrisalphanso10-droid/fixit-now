@@ -136,7 +136,7 @@ export default function PlanSelectionView({
                 <div className="p-6 space-y-3 font-mono text-xs">
                   <div className="flex items-start gap-2 text-[var(--theme-text-main)]">
                     <span className="text-signal font-bold">✓</span>
-                    <span><strong>100% Earnings Retention:</strong> Zero commission deducted</span>
+                    <span><strong>Direct Customer Payouts:</strong> Direct payment received from customer</span>
                   </div>
                   <div className="flex items-start gap-2 text-[var(--theme-text-main)]">
                     <span className="text-signal font-bold">✓</span>

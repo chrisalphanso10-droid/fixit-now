@@ -25,6 +25,7 @@ export default function CreateRequestView({
   const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [customAddress, setCustomAddress] = useState('');
   const [photoPreview, setPhotoPreview] = useState(null);
+  const [photoFile, setPhotoFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
@@ -56,6 +57,7 @@ export default function CreateRequestView({
         setErrors((prev) => ({ ...prev, photo: '! Please select an image file (PNG/JPEG).' }));
         return;
       }
+      setPhotoFile(file);
       const reader = new FileReader();
       reader.onload = () => {
         setPhotoPreview(reader.result);
@@ -80,12 +82,16 @@ export default function CreateRequestView({
     }
 
     let finalAddress = '';
+    let coords = null;
     if (selectedAddressMode === 'saved') {
       const chosen = savedAddresses.find((a) => a.id === Number(selectedAddressId));
       if (!chosen) {
         newErrors.address = '! Please select a saved address.';
       } else {
         finalAddress = chosen.address;
+        if (chosen.latitude != null && chosen.longitude != null) {
+          coords = { latitude: Number(chosen.latitude), longitude: Number(chosen.longitude) };
+        }
       }
     } else {
       if (!customAddress.trim()) {
@@ -111,8 +117,9 @@ export default function CreateRequestView({
         problem,
         description,
         address: finalAddress,
-        coordinates: { lat: 12.9784, lng: 77.6408 },
+        coordinates: coords,
         photo_url: photoPreview,
+        photo_file: photoFile,
       });
 
       if (onRequestCreated) {
@@ -408,13 +415,35 @@ export default function CreateRequestView({
           </div>
         </div>
 
+        {/* ============================================================ */}
+        {/* 5. DIRECT ON-SITE SETTLEMENT POLICY                           */}
+        {/* ============================================================ */}
+        <div className="p-5 bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] shadow-hard-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <span className="font-mono text-xs font-bold uppercase tracking-widest text-signal block">
+              5. Direct Payment Policy
+            </span>
+            <p className="text-xs text-[var(--theme-text-soft)] font-sans">
+              Service charges are agreed upon and settled directly between you and the tradesperson on-site via Cash or UPI.
+            </p>
+          </div>
+          <div className="sm:text-right shrink-0">
+            <span className="stamp-badge bg-done text-paper border-done text-xs py-1 px-3 block text-center">
+              DIRECT SETTLEMENT ONLY
+            </span>
+            <span className="font-mono text-[10px] text-[var(--theme-text-muted)] font-bold uppercase tracking-wider block mt-1">
+              ZERO PLATFORM COMMISSION
+            </span>
+          </div>
+        </div>
+
         {/* Dispatch Button */}
-        <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="font-mono text-xs text-[var(--theme-text-muted)]">
             <span className="block font-bold text-[var(--theme-text-main)] uppercase">
-              IMMEDIATE BOOKING POLICY
+              IMMEDIATE BOOKING ONLY
             </span>
-            <span>Nearest eligible fixer within 2 km will be pinged instantly.</span>
+            <span>Nearest verified partner within 2 km offered first with a 30s timer.</span>
           </div>
 
           <button

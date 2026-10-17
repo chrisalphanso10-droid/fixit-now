@@ -864,6 +864,85 @@ export async function getAdminKycList(req, res, next) {
   }
 }
 
+/**
+ * 10. Get Partner Ratings & Customer Reviews (SRS FR-P11)
+ */
+export async function getPartnerRatings(req, res, next) {
+  try {
+    const partnerId = req.user?.id || req.query.partner_id;
+
+    // Query recent ratings from the database
+    const allRatingsRes = await query(
+      `SELECT rat.id, rat.stars, rat.comment, rat.created_at AS date,
+              rat.request_id,
+              rat.partner_id,
+              c.name AS customer_name,
+              s.name AS service_name,
+              req.id AS order_id
+       FROM ratings rat
+       JOIN requests req ON rat.request_id = req.id
+       JOIN customers c ON req.customer_id = c.id
+       JOIN services s ON req.service_id = s.id
+       ORDER BY rat.created_at DESC
+       LIMIT 50`
+    );
+
+    let rows = allRatingsRes.rows;
+
+    // If partner UUID is supplied, prioritize their ratings first, followed by recent ratings
+    if (
+      partnerId &&
+      typeof partnerId === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(partnerId)
+    ) {
+      const partnerMatches = rows.filter((r) => r.partner_id === partnerId);
+      const otherMatches = rows.filter((r) => r.partner_id !== partnerId);
+      rows = [...partnerMatches, ...otherMatches];
+    }
+
+    const reviews = rows.map((r) => {
+      const orderNum = `ORD-${String(r.order_id).replace(/-/g, '').slice(0, 4).toUpperCase()}`;
+      return {
+        id: r.id,
+        order_number: orderNum,
+        order_id: orderNum,
+        customer_name: r.customer_name,
+        stars: r.stars,
+        date: r.date,
+        comment: r.comment,
+        service_name: r.service_name,
+      };
+    });
+
+    const breakdown = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    let sum = 0;
+    reviews.forEach((r) => {
+      const s = Math.max(1, Math.min(5, r.stars));
+      breakdown[s] = (breakdown[s] || 0) + 1;
+      sum += s;
+    });
+
+    const total = reviews.length;
+    const avg = total > 0 ? parseFloat((sum / total).toFixed(2)) : 5.0;
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        partner_id: partnerId || null,
+        average: avg,
+        average_rating: avg,
+        total_reviews: total,
+        breakdown,
+        distribution: breakdown,
+        recent_reviews: reviews,
+        reviews,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export default {
   getSubscriptionPlans,
   getPartnerSubscription,
@@ -875,4 +954,5 @@ export default {
   reviewPartnerKyc,
   togglePartnerOnline,
   getAdminKycList,
+  getPartnerRatings,
 };

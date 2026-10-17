@@ -16,6 +16,150 @@ import {
 const PARTNER_STORAGE_KEY = 'fixit_current_partner';
 const PARTNER_EARNINGS_KEY = 'fixit_partner_earnings_data';
 const PARTNER_ACTIVE_JOB_KEY = 'fixit_partner_active_job';
+export const PARTNER_RECENT_JOBS_KEY = 'fixit_partner_recent_jobs';
+export const PARTNER_RECENT_RATINGS_KEY = 'fixit_recent_ratings';
+
+/**
+ * Save recently completed or cancelled partner job to local audit log.
+ * Automatically dispatches update event so history views refresh immediately.
+ */
+export function savePartnerRecentJob(job) {
+  if (!job) return null;
+  try {
+    const raw = localStorage.getItem(PARTNER_RECENT_JOBS_KEY);
+    const existing = raw ? JSON.parse(raw) : [];
+
+    const normStatus =
+      job.status === 'service_completed' ||
+      job.status === 'payment_completed' ||
+      job.status === 'paid' ||
+      job.status === 'completed'
+        ? 'completed'
+        : job.status === 'cancelled'
+        ? 'cancelled'
+        : job.status || 'completed';
+
+    const orderNum =
+      job.order_number ||
+      `ORD-${String(job.id || Date.now()).replace(/-/g, '').slice(0, 4).toUpperCase()}`;
+
+    const jobEntry = {
+      id: job.id || Date.now(),
+      order_number: orderNum,
+      customer_name: job.customer_name || 'Customer',
+      customer_phone: job.customer_phone || '+91 98765 43210',
+      service_name: job.service_name || 'Service Call',
+      problem: job.problem || job.description || 'Service Work',
+      address: job.address || 'Indiranagar, Bengaluru',
+      status: normStatus,
+      amount: typeof job.amount === 'number' ? job.amount : parseFloat(job.amount) || 450.0,
+      payment_mode: job.payment_mode || 'Direct Cash / UPI (On-site)',
+      completed_at: job.completed_at || new Date().toISOString(),
+      rating: job.rating || null,
+      cancel_reason:
+        job.cancel_reason ||
+        (normStatus === 'cancelled' ? 'Customer cancelled prior to arrival.' : undefined),
+    };
+
+    // Filter out previous version of this job if present
+    const filtered = existing.filter(
+      (item) =>
+        String(item.id) !== String(jobEntry.id) &&
+        String(item.order_number) !== String(jobEntry.order_number)
+    );
+
+    const updated = [jobEntry, ...filtered];
+    localStorage.setItem(PARTNER_RECENT_JOBS_KEY, JSON.stringify(updated));
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('fixit_partner_history_updated'));
+    }
+    return jobEntry;
+  } catch (err) {
+    console.warn('[PartnerService] savePartnerRecentJob failed:', err);
+    return null;
+  }
+}
+
+/**
+ * Add verified customer rating and feedback review for partner.
+ * Updates both the ratings ledger and any matching work order in partner history.
+ */
+export function addPartnerRating(ratingData) {
+  if (!ratingData) return null;
+  try {
+    const raw = localStorage.getItem(PARTNER_RECENT_RATINGS_KEY);
+    const existing = raw ? JSON.parse(raw) : [];
+
+    const stars = Math.max(1, Math.min(5, Number(ratingData.stars) || 5));
+    const orderNum =
+      ratingData.orderNumber ||
+      ratingData.order_number ||
+      ratingData.order_id ||
+      `ORD-${String(ratingData.requestId || Date.now()).replace(/-/g, '').slice(0, 4).toUpperCase()}`;
+
+    const reviewEntry = {
+      id: ratingData.id || Date.now(),
+      order_number: orderNum,
+      order_id: orderNum,
+      customer_name: ratingData.customerName || ratingData.customer_name || 'Customer',
+      stars,
+      date: ratingData.date || new Date().toISOString(),
+      comment: (ratingData.comment || 'Quick fix, courteous professional.').trim(),
+      service_name: ratingData.serviceName || ratingData.service_name || 'Home Service',
+      partner_id: ratingData.partnerId || ratingData.partner_id,
+    };
+
+    const filtered = existing.filter(
+      (item) =>
+        String(item.id) !== String(reviewEntry.id) &&
+        String(item.order_number) !== String(reviewEntry.order_number)
+    );
+
+    const updated = [reviewEntry, ...filtered];
+    localStorage.setItem(PARTNER_RECENT_RATINGS_KEY, JSON.stringify(updated));
+
+    // Also update rating on matching job in partner history log
+    try {
+      const histRaw = localStorage.getItem(PARTNER_RECENT_JOBS_KEY);
+      if (histRaw) {
+        const hist = JSON.parse(histRaw);
+        let changed = false;
+        const updatedHist = hist.map((j) => {
+          if (
+            String(j.order_number) === String(orderNum) ||
+            (ratingData.requestId && String(j.id) === String(ratingData.requestId))
+          ) {
+            changed = true;
+            return {
+              ...j,
+              rating: {
+                stars,
+                comment: reviewEntry.comment,
+              },
+            };
+          }
+          return j;
+        });
+        if (changed) {
+          localStorage.setItem(PARTNER_RECENT_JOBS_KEY, JSON.stringify(updatedHist));
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('fixit_partner_ratings_updated'));
+      window.dispatchEvent(new Event('fixit_partner_history_updated'));
+    }
+
+    return reviewEntry;
+  } catch (err) {
+    console.warn('[PartnerService] addPartnerRating failed:', err);
+    return null;
+  }
+}
 
 function getStoredEarnings(partnerId) {
   const currentId = partnerId || getActivePartner()?.id;
@@ -589,74 +733,70 @@ export function setActiveJob(job) {
  * Advance Active Job to next step (single primary next-action button)
  */
 export async function advanceJobStep(jobId, currentStep, enteredOtp = null) {
-  await new Promise((resolve) => setTimeout(resolve, 300));
   const job = getActiveJob();
 
-  if (!job || job.id !== Number(jobId)) {
-    throw new Error('Active job not found or already completed.');
-  }
-
-  if (currentStep === 'accepted') {
-    const updated = {
-      ...job,
-      status: 'on_the_way',
-      step_index: 2,
-      started_trip_at: new Date().toISOString(),
-    };
-    setActiveJob(updated);
-    return updated;
-  }
-
-  if (currentStep === 'on_the_way') {
-    const updated = {
-      ...job,
-      status: 'arrived',
-      step_index: 3,
-      arrived_at: new Date().toISOString(),
-    };
-    setActiveJob(updated);
-    return updated;
-  }
-
+  // 1. If at 'arrived', partner submits OTP to server for verification
   if (currentStep === 'arrived') {
-    const cleanOtp = enteredOtp?.trim();
-    if (cleanOtp !== job.service_otp && cleanOtp !== '8392') {
-      throw new Error(`Invalid service OTP. Please ask customer for the 4-digit code (Hint: ${job.service_otp || '8392'}).`);
+    try {
+      const res = await post(`/api/requests/${jobId}/verify-otp`, {
+        otp: enteredOtp?.trim(),
+      });
+      if (res && res.status === 'success') {
+        const updated = {
+          ...(job || {}),
+          id: jobId,
+          status: 'in_progress',
+          step_index: 4,
+          service_started_at: new Date().toISOString(),
+          otp_verified: true,
+        };
+        setActiveJob(updated);
+        return updated;
+      }
+    } catch (err) {
+      throw new Error(err.message || 'OTP verification failed.');
     }
-
-    const updated = {
-      ...job,
-      status: 'in_progress',
-      step_index: 4,
-      service_started_at: new Date().toISOString(),
-      otp_verified: true,
-    };
-    setActiveJob(updated);
-    return updated;
   }
 
-  if (currentStep === 'in_progress') {
-    const updated = {
-      ...job,
-      status: 'completed',
-      step_index: 5,
-      completed_at: new Date().toISOString(),
-    };
-    setActiveJob(updated);
-    return updated;
+  // 2. Map other status transitions
+  const nextStatusMap = {
+    accepted: 'on_the_way',
+    on_the_way: 'arrived',
+    in_progress: 'completed',
+    completed: 'paid',
+  };
+  const nextStepIndexMap = {
+    accepted: 2,
+    on_the_way: 3,
+    in_progress: 5,
+    completed: 6,
+  };
+
+  const targetStatus = nextStatusMap[currentStep] || currentStep;
+  const targetStep = nextStepIndexMap[currentStep] || 1;
+
+  // Try real backend API
+  try {
+    await put(`/api/requests/${jobId}/status`, { status: targetStatus });
+  } catch (apiErr) {
+    console.warn('[PartnerService API update warning]:', apiErr.message);
   }
 
-  if (currentStep === 'completed') {
-    // Stage 5: Payment received - confirm direct on-site settlement (SRS FR-P12, BR-7)
-    const settlementAmount = job.amount || 450.0;
+  // If completed / paid: direct cash/UPI settlement confirmed
+  if (targetStatus === 'paid') {
+    const settlementAmount = job?.amount || 450.0;
     const currentPartner = getActivePartner();
     const earnings = getStoredEarnings(currentPartner?.id);
+    const orderNum =
+      job?.order_number ||
+      `ORD-${String(jobId).replace(/-/g, '').slice(0, 4).toUpperCase()}`;
+
     const newEntry = {
       id: Date.now(),
-      order_number: job.order_number || `ORD-${job.id}`,
-      customer_name: job.customer_name || 'Customer',
-      service_name: job.service_name || 'Service',
-      problem: job.problem || 'Completed Repair Work',
+      order_number: orderNum,
+      customer_name: job?.customer_name || 'Customer',
+      service_name: job?.service_name || 'Service',
+      problem: job?.problem || 'Completed Repair Work',
       amount: settlementAmount,
       payment_mode: 'Direct Cash / UPI (On-site)',
       date: new Date().toISOString(),
@@ -675,17 +815,64 @@ export async function advanceJobStep(jobId, currentStep, enteredOtp = null) {
     };
     saveStoredEarnings(updatedEarnings, currentPartner?.id);
 
-    // Clear active job
+    // Save completed job to partner audit history
+    savePartnerRecentJob({
+      id: jobId || Date.now(),
+      order_number: orderNum,
+      customer_name: job?.customer_name || 'Customer',
+      customer_phone: job?.customer_phone || '+91 98765 43210',
+      service_name: job?.service_name || 'Service Call',
+      problem: job?.problem || job?.description || 'Completed Repair Work',
+      address: job?.address || 'Site Location, Bengaluru',
+      status: 'completed',
+      amount: settlementAmount,
+      payment_mode: 'Direct Cash / UPI (On-site)',
+      completed_at: new Date().toISOString(),
+      rating: job?.rating || null,
+    });
+
+    // Clear active job so partner radar is free
     setActiveJob(null);
 
     return {
+      id: jobId,
       status: 'paid',
-      closed: true,
-      settlement: newEntry,
+      step_index: 6,
+      settlement: {
+        ...newEntry,
+        payment_confirmed: true,
+      },
     };
   }
 
-  return job;
+  // If partner completes service work, record completed entry into history
+  if (targetStatus === 'completed') {
+    savePartnerRecentJob({
+      id: jobId || Date.now(),
+      order_number:
+        job?.order_number ||
+        `ORD-${String(jobId).replace(/-/g, '').slice(0, 4).toUpperCase()}`,
+      customer_name: job?.customer_name || 'Customer',
+      customer_phone: job?.customer_phone || '+91 98765 43210',
+      service_name: job?.service_name || 'Service Call',
+      problem: job?.problem || job?.description || 'Service Work',
+      address: job?.address || 'Site Location, Bengaluru',
+      status: 'completed',
+      amount: job?.amount || 450.0,
+      payment_mode: 'Direct Cash / UPI (On-site)',
+      completed_at: new Date().toISOString(),
+      rating: job?.rating || null,
+    });
+  }
+
+  const updated = {
+    ...(job || {}),
+    id: jobId,
+    status: targetStatus,
+    step_index: targetStep,
+  };
+  setActiveJob(updated);
+  return updated;
 }
 
 /**
@@ -730,6 +917,27 @@ export function getMockIncomingJob() {
  */
 export async function simulateCustomerCancel(jobId, reason = 'Customer cancelled due to emergency.') {
   await new Promise((resolve) => setTimeout(resolve, 200));
+  const job = getActiveJob();
+  const orderNum =
+    job?.order_number ||
+    `ORD-${String(jobId || 428).replace(/-/g, '').slice(0, 4).toUpperCase()}`;
+
+  // Save cancellation record to partner history
+  savePartnerRecentJob({
+    id: jobId || job?.id || Date.now(),
+    order_number: orderNum,
+    customer_name: job?.customer_name || 'Customer',
+    customer_phone: job?.customer_phone || '+91 98765 43210',
+    service_name: job?.service_name || 'Service Call',
+    problem: job?.problem || job?.description || 'Emergency Dispatch',
+    address: job?.address || 'Customer site location',
+    status: 'cancelled',
+    amount: 0,
+    cancel_reason: reason,
+    completed_at: new Date().toISOString(),
+    rating: null,
+  });
+
   setActiveJob(null);
   return {
     cancelled: true,
@@ -747,19 +955,216 @@ export async function getPartnerEarnings(partnerId) {
   return getStoredEarnings(partnerId);
 }
 
-export async function getPartnerRatings(_partnerId) {
+/**
+ * Get Partner Ratings, Scorecard & Recent Verified Customer Reviews (SRS FR-P11)
+ * Combines server ratings, local storage ratings from customer submissions, and verified testimonials.
+ */
+export async function getPartnerRatings(partnerId) {
   await new Promise((resolve) => setTimeout(resolve, 150));
-  return mockPartnerRatings;
+
+  let apiReviews = [];
+  try {
+    let res;
+    try {
+      res = await get('/api/partner/ratings');
+    } catch {
+      res = await get('/api/partners/ratings');
+    }
+    if (res && res.status === 'success' && res.data) {
+      if (Array.isArray(res.data.recent_reviews) && res.data.recent_reviews.length > 0) {
+        apiReviews = res.data.recent_reviews;
+      } else if (Array.isArray(res.data.reviews) && res.data.reviews.length > 0) {
+        apiReviews = res.data.reviews;
+      }
+    }
+  } catch {
+    // Backend may be unauthenticated
+  }
+
+  // Also harvest any rated requests directly from /api/requests
+  try {
+    const reqRes = await get('/api/requests?filter=all');
+    if (reqRes && reqRes.status === 'success' && Array.isArray(reqRes.data)) {
+      for (const item of reqRes.data) {
+        const itemStars = item.rating?.stars || item.rating_stars;
+        const itemComment = item.rating?.comment || item.rating_comment;
+        if (itemStars) {
+          const ordId =
+            item.order_number ||
+            `ORD-${String(item.id).replace(/-/g, '').slice(0, 4).toUpperCase()}`;
+          apiReviews.push({
+            id: `req-${item.id}`,
+            order_number: ordId,
+            order_id: ordId,
+            customer_name: item.customer_name || 'Customer',
+            stars: itemStars,
+            date: item.completed_at || item.updated_at || item.created_at || new Date().toISOString(),
+            comment: itemComment || 'Service completed promptly and professionally.',
+            service_name: item.service_name || 'Home Service',
+          });
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // Load newly submitted ratings from localStorage
+  let localRecentRatings = [];
+  try {
+    const raw = localStorage.getItem(PARTNER_RECENT_RATINGS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) localRecentRatings.push(...parsed);
+    }
+  } catch {
+    // ignore
+  }
+
+  // Also check PARTNER_RECENT_JOBS_KEY for completed jobs with ratings
+  try {
+    const rawJobs = localStorage.getItem(PARTNER_RECENT_JOBS_KEY);
+    if (rawJobs) {
+      const parsedJobs = JSON.parse(rawJobs);
+      if (Array.isArray(parsedJobs)) {
+        for (const job of parsedJobs) {
+          if (job.rating && job.rating.stars) {
+            localRecentRatings.push({
+              id: `job-${job.id || job.order_number}`,
+              order_number: job.order_number,
+              order_id: job.order_number,
+              customer_name: job.customer_name || 'Customer',
+              stars: job.rating.stars,
+              date: job.completed_at || new Date().toISOString(),
+              comment: job.rating.comment,
+              service_name: job.service_name,
+            });
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  const baseReviews = (mockPartnerRatings.reviews || []).map((r) => ({
+    id: r.id,
+    order_number: r.order_number,
+    order_id: r.order_number,
+    customer_name: r.customer_name,
+    stars: r.stars,
+    date: r.date,
+    comment: r.comment,
+    service_name: r.service_name,
+  }));
+
+  // Merge recent customer reviews at the top, followed by API reviews and baseline reviews
+  const seenReviews = new Set();
+  const allReviews = [];
+
+  for (const rev of [...localRecentRatings, ...apiReviews, ...baseReviews]) {
+    const key = rev.order_number || rev.order_id || String(rev.id);
+    if (!seenReviews.has(key)) {
+      seenReviews.add(key);
+      allReviews.push({
+        ...rev,
+        order_number: rev.order_number || rev.order_id || 'ORD-0428',
+        order_id: rev.order_number || rev.order_id || 'ORD-0428',
+      });
+    }
+  }
+
+  // Recalculate dynamic star breakdown and average aggregate score
+  const breakdown = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+  let sumStars = 0;
+  allReviews.forEach((r) => {
+    const s = Math.max(1, Math.min(5, Number(r.stars) || 5));
+    breakdown[s] = (breakdown[s] || 0) + 1;
+    sumStars += s;
+  });
+
+  const totalReviews = allReviews.length;
+  const average = totalReviews > 0 ? parseFloat((sumStars / totalReviews).toFixed(2)) : 4.9;
+
+  return {
+    partner_id: partnerId,
+    average,
+    average_rating: average,
+    total_reviews: totalReviews,
+    breakdown,
+    distribution: breakdown,
+    recent_reviews: allReviews,
+    reviews: allReviews,
+  };
 }
 
 /* ========================================================================== */
 /* 7. REQUEST HISTORY (SRS FR-P11, BR-6)                                      */
 /* ========================================================================== */
 
+/**
+ * Get Partner Job History log.
+ * Fetches recent completed and cancelled jobs from live database, local session storage, and baseline audit logs.
+ */
 export async function getPartnerHistory(partnerId, filter = 'ALL') {
-  await new Promise((resolve) => setTimeout(resolve, 200));
+  await new Promise((resolve) => setTimeout(resolve, 150));
 
-  const list = [
+  let apiJobs = [];
+  try {
+    const res = await get('/api/requests?filter=all');
+    if (res && res.status === 'success' && Array.isArray(res.data)) {
+      apiJobs = res.data.map((r) => {
+        const normStatus =
+          r.status === 'service_completed' ||
+          r.status === 'payment_completed' ||
+          r.status === 'paid' ||
+          r.status === 'completed'
+            ? 'completed'
+            : r.status === 'cancelled'
+            ? 'cancelled'
+            : r.status;
+
+        return {
+          id: r.id,
+          order_number:
+            r.order_number ||
+            `ORD-${String(r.id).replace(/-/g, '').slice(0, 4).toUpperCase()}`,
+          customer_name: r.customer_name || 'Customer',
+          customer_phone: r.customer_phone || '+91 98765 43210',
+          service_name: r.service_name || 'Service Call',
+          problem: r.problem || r.description || 'Service Work',
+          address: r.address || 'Indiranagar, Bengaluru',
+          status: normStatus,
+          amount: parseFloat(r.amount || r.base_price_estimate) || 450.0,
+          payment_mode: r.payment_mode || 'Direct UPI / Cash (On-site)',
+          completed_at: r.completed_at || r.updated_at || r.created_at,
+          rating:
+            r.rating ||
+            (r.rating_stars
+              ? { stars: r.rating_stars, comment: r.rating_comment }
+              : null),
+          cancel_reason:
+            r.cancel_reason ||
+            (normStatus === 'cancelled' ? 'Cancelled by customer' : undefined),
+        };
+      });
+    }
+  } catch {
+    // Backend may be offline or unauthenticated
+  }
+
+  // Load locally saved recent completed & cancelled jobs
+  let localRecentJobs = [];
+  try {
+    const raw = localStorage.getItem(PARTNER_RECENT_JOBS_KEY);
+    if (raw) {
+      localRecentJobs = JSON.parse(raw);
+    }
+  } catch {
+    // ignore
+  }
+
+  const baselineList = [
     {
       id: 427,
       order_number: 'ORD-0427',
@@ -818,13 +1223,50 @@ export async function getPartnerHistory(partnerId, filter = 'ALL') {
     },
   ];
 
+  // Merge: Local recent jobs first, then API jobs, then baseline
+  const seenOrders = new Set();
+  const merged = [];
+
+  for (const job of [...localRecentJobs, ...apiJobs, ...baselineList]) {
+    const key = job.order_number || String(job.id);
+    if (!seenOrders.has(key)) {
+      seenOrders.add(key);
+      merged.push(job);
+    }
+  }
+
+  // Synchronize any submitted ratings from fixit_recent_ratings onto the jobs
+  try {
+    const rawRatings = localStorage.getItem(PARTNER_RECENT_RATINGS_KEY);
+    if (rawRatings) {
+      const ratings = JSON.parse(rawRatings);
+      const ratingMap = {};
+      ratings.forEach((r) => {
+        if (r.order_number) ratingMap[r.order_number] = r;
+      });
+      merged.forEach((j) => {
+        if (!j.rating && ratingMap[j.order_number]) {
+          const r = ratingMap[j.order_number];
+          j.rating = { stars: r.stars, comment: r.comment };
+        }
+      });
+    }
+  } catch {
+    // ignore
+  }
+
+  // Sort descending by date (most recent job at the very top)
+  merged.sort(
+    (a, b) => new Date(b.completed_at || 0) - new Date(a.completed_at || 0)
+  );
+
   if (filter === 'COMPLETED') {
-    return list.filter((r) => r.status === 'completed');
+    return merged.filter((r) => r.status === 'completed');
   }
   if (filter === 'CANCELLED') {
-    return list.filter((r) => r.status === 'cancelled');
+    return merged.filter((r) => r.status === 'cancelled');
   }
-  return list;
+  return merged;
 }
 
 /* ========================================================================== */
@@ -904,6 +1346,8 @@ export default {
   getPartnerEarnings,
   getPartnerRatings,
   getPartnerHistory,
+  savePartnerRecentJob,
+  addPartnerRating,
   updatePartnerProfile,
   getEligiblePartnerForTrade,
   getPartnerById,
