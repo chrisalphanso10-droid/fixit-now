@@ -257,16 +257,27 @@ export default function AdminKycReviewView() {
                       <div className="flex items-center gap-2">
                         <span className="text-signal font-bold">📄</span>
                         <div>
-                          <strong className="text-[var(--theme-text-main)]">{dossier.govt_id_type}: </strong>
-                          <span className="text-[var(--theme-text-soft)]">{dossier.id_number}</span>
+                          <strong className="text-[var(--theme-text-main)]">{dossier.govt_id_type || 'Government ID'}: </strong>
+                          <span className="text-[var(--theme-text-soft)]">{dossier.id_number || 'Submitted'}</span>
                           <span className="text-[10px] text-[var(--theme-text-muted)] block">
-                            File: {dossier.document_name} (PDF Verified)
+                            File: {dossier.document_name}
                           </span>
                         </div>
                       </div>
-                      <span className="text-[10px] font-bold text-done border border-done px-1.5 py-0.5">
-                        PASS
-                      </span>
+                      {dossier.document_url ? (
+                        <a
+                          href={dossier.document_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] font-bold text-signal underline hover:text-[var(--theme-text-main)] border border-signal px-2 py-1 min-h-[32px] flex items-center shrink-0"
+                        >
+                          VIEW DOCUMENT ↗
+                        </a>
+                      ) : (
+                        <span className="text-[10px] font-bold text-done border border-done px-1.5 py-0.5 shrink-0">
+                          SUBMITTED
+                        </span>
+                      )}
                     </div>
 
                     {/* Doc 2: Passport Photo */}
@@ -276,13 +287,24 @@ export default function AdminKycReviewView() {
                         <div>
                           <strong className="text-[var(--theme-text-main)]">Passport Photograph: </strong>
                           <span className="text-[10px] text-[var(--theme-text-muted)] block">
-                            File: {dossier.photo_name} (Face Match 99.4%)
+                            File: {dossier.photo_name}
                           </span>
                         </div>
                       </div>
-                      <span className="text-[10px] font-bold text-done border border-done px-1.5 py-0.5">
-                        JPEG/PNG
-                      </span>
+                      {dossier.photo_url ? (
+                        <a
+                          href={dossier.photo_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] font-bold text-signal underline hover:text-[var(--theme-text-main)] border border-signal px-2 py-1 min-h-[32px] flex items-center shrink-0"
+                        >
+                          VIEW PHOTO ↗
+                        </a>
+                      ) : (
+                        <span className="text-[10px] font-bold text-done border border-done px-1.5 py-0.5 shrink-0">
+                          PHOTO
+                        </span>
+                      )}
                     </div>
 
                     {/* Doc 3: Trade Certification */}
@@ -296,9 +318,20 @@ export default function AdminKycReviewView() {
                           </span>
                         </div>
                       </div>
-                      <span className="text-[10px] font-bold text-signal border border-signal px-1.5 py-0.5">
-                        NCVT/GOVT
-                      </span>
+                      {dossier.trade_cert_url ? (
+                        <a
+                          href={dossier.trade_cert_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] font-bold text-signal underline hover:text-[var(--theme-text-main)] border border-signal px-2 py-1 min-h-[32px] flex items-center shrink-0"
+                        >
+                          VIEW CERT ↗
+                        </a>
+                      ) : (
+                        <span className="text-[10px] font-bold text-signal border border-signal px-1.5 py-0.5 shrink-0">
+                          {dossier.trade_cert_name !== 'Not Provided' ? 'PROVIDED' : 'OPTIONAL'}
+                        </span>
+                      )}
                     </div>
                   </div>
 

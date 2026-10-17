@@ -42,9 +42,11 @@ export default function AdminPortal({
   // Load pending KYC count for sidebar badge
   useEffect(() => {
     if (session) {
-      getAdminKycList('pending').then((list) => {
-        setPendingKycCount(list.length);
-      });
+      getAdminKycList('pending')
+        .then((list) => {
+          setPendingKycCount(Array.isArray(list) ? list.length : 0);
+        })
+        .catch(() => {});
     }
   }, [session, activeTab]);
 

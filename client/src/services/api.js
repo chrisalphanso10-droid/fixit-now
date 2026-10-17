@@ -75,18 +75,36 @@ export async function get(endpoint) {
 export async function post(endpoint, data = {}) {
   const primaryUrl = API_BASE_URL ? `${API_BASE_URL}${endpoint}` : endpoint;
 
-  const response = await fetch(primaryUrl, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify(data),
-  });
+  try {
+    const response = await fetch(primaryUrl, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
 
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => ({}));
-    throw new Error(errorBody.message || `HTTP ${response.status}: ${response.statusText}`);
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.message || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (err) {
+    if (primaryUrl !== endpoint) {
+      try {
+        const fallbackResponse = await fetch(endpoint, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(data),
+        });
+        if (fallbackResponse.ok) {
+          return await fallbackResponse.json();
+        }
+      } catch {
+        // ignore fallback error
+      }
+    }
+    throw err;
   }
-
-  return response.json();
 }
 
 /**
@@ -98,18 +116,36 @@ export async function post(endpoint, data = {}) {
 export async function put(endpoint, data = {}) {
   const primaryUrl = API_BASE_URL ? `${API_BASE_URL}${endpoint}` : endpoint;
 
-  const response = await fetch(primaryUrl, {
-    method: 'PUT',
-    headers: getAuthHeaders(),
-    body: JSON.stringify(data),
-  });
+  try {
+    const response = await fetch(primaryUrl, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
 
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => ({}));
-    throw new Error(errorBody.message || `HTTP ${response.status}: ${response.statusText}`);
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.message || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (err) {
+    if (primaryUrl !== endpoint) {
+      try {
+        const fallbackResponse = await fetch(endpoint, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(data),
+        });
+        if (fallbackResponse.ok) {
+          return await fallbackResponse.json();
+        }
+      } catch {
+        // ignore fallback error
+      }
+    }
+    throw err;
   }
-
-  return response.json();
 }
 
 /**

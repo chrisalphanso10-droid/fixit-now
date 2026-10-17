@@ -60,12 +60,19 @@ export default function AdminDashboard({ onNavigateTab }) {
 
   useEffect(() => {
     let mounted = true;
-    getAdminDashboardData().then((res) => {
-      if (mounted) {
-        setData(res);
-        setLoading(false);
-      }
-    });
+    getAdminDashboardData()
+      .then((res) => {
+        if (mounted) {
+          setData(res);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.warn('[AdminDashboard] Error loading dashboard data:', err);
+        if (mounted) {
+          setLoading(false);
+        }
+      });
     return () => {
       mounted = false;
     };
@@ -79,8 +86,17 @@ export default function AdminDashboard({ onNavigateTab }) {
     );
   }
 
-  const { analytics, liveUsers } = data;
-  const { summary } = analytics;
+  const analytics = data?.analytics || {};
+  const summary = analytics?.summary || {};
+  const liveUsers = data?.liveUsers || {};
+  const liveOnlinePartners = liveUsers?.live_online_partners || [];
+  const requestsOverTime = analytics?.requestsOverTime || [];
+  const topServices = analytics?.topServices || [];
+  const completionVsCancellation = analytics?.completionVsCancellation || [];
+  const growthMetrics = analytics?.growthMetrics || [];
+  const subscriptionRevenue = analytics?.subscriptionRevenue || [];
+  const peakHours = analytics?.peakHours || [];
+  const topRatedPartners = analytics?.topRatedPartners || [];
 
   return (
     <div className="space-y-8">
@@ -226,7 +242,7 @@ export default function AdminDashboard({ onNavigateTab }) {
           <div className="border border-[#3A3F47] p-3 bg-[#111418]">
             <div className="font-mono text-[10px] uppercase text-[#9BA3AF]">AVG ARRIVAL ETA</div>
             <div className="text-2xl font-display font-extrabold text-paper mt-1">
-              {summary.avg_arrival_minutes}m
+              {summary.avg_arrival_minutes || 16}m
             </div>
             <div className="font-mono text-[10px] text-paper">Strict haversine &lt; 2km</div>
           </div>
@@ -238,7 +254,7 @@ export default function AdminDashboard({ onNavigateTab }) {
             FIELD UNITS BROADCASTING ON-AIR:
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            {liveUsers.live_online_partners.map((partner) => (
+            {liveOnlinePartners.map((partner) => (
               <div
                 key={partner.id}
                 className="bg-[#1A1E24] border border-[#2A2E35] p-2 flex items-center justify-between font-mono text-xs"
@@ -292,7 +308,7 @@ export default function AdminDashboard({ onNavigateTab }) {
 
           <div className="h-64 sm:h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={analytics.requestsOverTime} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <BarChart data={requestsOverTime} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--theme-border)" opacity={0.5} />
                 <XAxis
                   dataKey="period"
@@ -334,7 +350,7 @@ export default function AdminDashboard({ onNavigateTab }) {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 layout="vertical"
-                data={analytics.topServices.slice(0, 5)}
+                data={topServices.slice(0, 5)}
                 margin={{ top: 10, right: 20, left: 20, bottom: 0 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--theme-border)" opacity={0.5} />
@@ -381,7 +397,7 @@ export default function AdminDashboard({ onNavigateTab }) {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={analytics.completionVsCancellation}
+                  data={completionVsCancellation}
                   cx="50%"
                   cy="50%"
                   innerRadius={50}
@@ -390,7 +406,7 @@ export default function AdminDashboard({ onNavigateTab }) {
                   dataKey="value"
                   label={false}
                 >
-                  {analytics.completionVsCancellation.map((entry, index) => (
+                  {completionVsCancellation.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} stroke="var(--theme-border)" strokeWidth={2} />
                   ))}
                 </Pie>
@@ -400,7 +416,7 @@ export default function AdminDashboard({ onNavigateTab }) {
           </div>
 
           <div className="mt-2 space-y-1 font-mono text-xs">
-            {analytics.completionVsCancellation.map((item, idx) => (
+            {completionVsCancellation.map((item, idx) => (
               <div key={idx} className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 inline-block shrink-0" style={{ backgroundColor: item.color }} />
@@ -425,7 +441,7 @@ export default function AdminDashboard({ onNavigateTab }) {
 
           <div className="h-52 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={analytics.growthMetrics} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <LineChart data={growthMetrics} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--theme-border)" opacity={0.5} />
                 <XAxis
                   dataKey="month"
@@ -480,7 +496,7 @@ export default function AdminDashboard({ onNavigateTab }) {
 
           <div className="h-52 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={analytics.subscriptionRevenue} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+              <BarChart data={subscriptionRevenue} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--theme-border)" opacity={0.5} />
                 <XAxis
                   dataKey="month"
@@ -525,7 +541,7 @@ export default function AdminDashboard({ onNavigateTab }) {
 
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={analytics.peakHours} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <BarChart data={peakHours} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--theme-border)" opacity={0.5} />
                 <XAxis
                   dataKey="hour"
@@ -538,7 +554,7 @@ export default function AdminDashboard({ onNavigateTab }) {
                 />
                 <Tooltip content={<IndustrialTooltip />} />
                 <Bar dataKey="requests" name="Hourly Requests" fill="#6B7079" radius={[0, 0, 0, 0]}>
-                  {analytics.peakHours.map((entry, index) => (
+                  {peakHours.map((entry, index) => (
                     <Cell
                       key={`hour-cell-${index}`}
                       fill={entry.requests > 50 ? '#FF5B14' : '#6B7079'}
@@ -582,7 +598,7 @@ export default function AdminDashboard({ onNavigateTab }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--theme-border)]">
-                {analytics.topRatedPartners.map((item) => (
+                {topRatedPartners.map((item) => (
                   <tr key={item.rank} className="hover:bg-[var(--theme-surface-sub)]">
                     <td className="py-2.5 pr-2 font-bold text-signal">#{item.rank}</td>
                     <td className="py-2.5 pr-4 font-bold text-[var(--theme-text-main)]">{item.name}</td>

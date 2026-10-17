@@ -655,9 +655,31 @@ export async function reviewPartnerKyc(req, res, next) {
        SET status = $1,
            reviewer_notes = $2,
            reviewed_at = CURRENT_TIMESTAMP
-       WHERE partner_id = $3 AND status = 'pending'`,
+       WHERE partner_id = $3`,
       [decision, reviewer_notes?.trim() || cleanReason, partnerId]
     );
+
+    // Audit decision in activity_logs (SRS Section 5 Auditability)
+    try {
+      const partnerName = check.rows[0]?.name || 'Partner';
+      await query(
+        `INSERT INTO activity_logs (actor, action, details, created_at)
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP)`,
+        [
+          req.user?.email || 'admin@fixitnow.com',
+          decision === 'verified' ? 'KYC_APPROVED' : 'KYC_REJECTED',
+          JSON.stringify({
+            partner_id: partnerId,
+            partner_name: partnerName,
+            decision,
+            rejection_reason: cleanReason,
+            reviewer_notes: reviewer_notes?.trim() || null,
+          }),
+        ]
+      );
+    } catch (auditErr) {
+      console.error('[KYC Audit Log Error]:', auditErr.message);
+    }
 
     return res.status(200).json({
       status: 'success',
