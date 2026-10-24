@@ -71,8 +71,10 @@ export default function PartnerAuthView({
     setError(null);
     try {
       let email = 'rajesh@example.com';
-      let password = 'Partner@2026';
-      if (scenarioType === 'pending_kyc') {
+      if (scenarioType === 'verified_2') {
+        email = 'demo_partner_1792257106317@example.com';
+        password = 'Password@123';
+      } else if (scenarioType === 'pending_kyc') {
         email = 'sunil.carpenter@fixitnow.local';
       } else if (scenarioType === 'rejected_kyc') {
         email = 'vikram.appliance@fixitnow.local';
@@ -388,7 +390,21 @@ export default function PartnerAuthView({
                   <span className="text-[10px] text-done">● Verified</span>
                 </div>
                 <div className="text-[10px] text-[var(--theme-text-soft)]">
-                  Plumber · Active Plan (108d)
+                  Plumber 1 · Active Plan (0.8km)
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDemoLogin('verified_2')}
+                className="p-2 border border-[var(--theme-border)] bg-[var(--theme-surface)] hover:bg-signal hover:text-ink text-left font-bold transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <span>Arjun Verma</span>
+                  <span className="text-[10px] text-done">● Verified</span>
+                </div>
+                <div className="text-[10px] text-[var(--theme-text-soft)]">
+                  Plumber 2 · Active Plan (0.05km)
                 </div>
               </button>
 

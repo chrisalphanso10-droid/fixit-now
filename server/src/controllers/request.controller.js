@@ -3,7 +3,7 @@
  * Conforms to docs/SRS.md FR-C6, FR-C7, FR-C9, FR-C10 to FR-C12, FR-C19, FR-P7, FR-P9, FR-M1 to FR-M6.
  */
 
-import { query } from '../config/db.js';
+import { query, getClient } from '../config/db.js';
 import { geocodeAddress } from '../services/geocoding.service.js';
 import { findEligiblePartnersFromDb } from '../services/matching.service.js';
 import {
@@ -70,7 +70,7 @@ export async function createRequest(req, res, next) {
       photoUrl = req.body.photo_url;
     }
 
-    // Geocode address if coordinates are missing or zero
+    // Geocode address if coordinates are missing or zero (outside transaction to avoid blocking)
     let lat = latitude != null ? Number(latitude) : null;
     let lon = longitude != null ? Number(longitude) : null;
     if (lat == null || lon == null || Number.isNaN(lat) || Number.isNaN(lon) || (lat === 0 && lon === 0)) {
@@ -82,33 +82,86 @@ export async function createRequest(req, res, next) {
     // Generate 6-digit service OTP (SRS FR-C16)
     const serviceOtp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Insert request record into PostgreSQL
-    const insertResult = await query(
-      `INSERT INTO requests (
-         customer_id, service_id, problem, description, address, latitude, longitude, photo_url, status, service_otp
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'requested', $9)
-       RETURNING *`,
-      [
-        customerId,
-        serviceObj.id,
-        problem.trim(),
-        description.trim(),
-        address.trim(),
-        lat,
-        lon,
-        photoUrl,
-        serviceOtp,
-      ]
-    );
+    // Concurrency requirement f: Customer row lock inside transaction serializes concurrent double-clicks
+    const client = await getClient();
+    let existing = null;
+    let newRequest = null;
 
-    const newRequest = insertResult.rows[0];
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT id FROM customers WHERE id = $1 FOR UPDATE', [customerId]);
+
+      // Check if the same customer submitted the same service within the last few seconds
+      const recentRes = await client.query(
+        `SELECT * FROM requests
+         WHERE customer_id = $1
+           AND service_id = $2
+           AND status IN ('searching', 'requested')
+           AND created_at > (CURRENT_TIMESTAMP - INTERVAL '5 seconds')
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [customerId, serviceObj.id]
+      );
+
+      if (recentRes.rows.length > 0) {
+        existing = recentRes.rows[0];
+        await client.query('COMMIT');
+      } else {
+        const insertResult = await client.query(
+          `INSERT INTO requests (
+             customer_id, service_id, problem, description, address, latitude, longitude, photo_url, status, service_otp
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'searching', $9)
+           RETURNING *`,
+          [
+            customerId,
+            serviceObj.id,
+            problem.trim(),
+            description.trim(),
+            address.trim(),
+            lat,
+            lon,
+            photoUrl,
+            serviceOtp,
+          ]
+        );
+        newRequest = insertResult.rows[0];
+
+        // Insert initial status log tick
+        await client.query(
+          `INSERT INTO request_status_logs (request_id, status) VALUES ($1, 'searching')`,
+          [newRequest.id]
+        );
+
+        await client.query('COMMIT');
+      }
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
+
+    if (existing) {
+      const orderNumber = `ORD-${String(existing.id).replace(/-/g, '').slice(0, 4).toUpperCase()}`;
+      return res.status(200).json({
+        status: 'success',
+        message: 'Request created. Scanning for nearby eligible partners...',
+        data: {
+          request: {
+            ...existing,
+            order_number: orderNumber,
+            service_name: serviceObj.name,
+            base_price_estimate: serviceObj.base_price_estimate,
+            customer_name: customerName,
+            customer_phone: customerPhone,
+          },
+          order_number: orderNumber,
+          dispatch_status: 'searching',
+        },
+      });
+    }
+
     const orderNumber = `ORD-${String(newRequest.id).replace(/-/g, '').slice(0, 4).toUpperCase()}`;
-
-    // Insert initial status log tick
-    await query(
-      `INSERT INTO request_status_logs (request_id, status) VALUES ($1, 'requested')`,
-      [newRequest.id]
-    );
 
     // Query eligible partners within 2 km (online, KYC verified, active plan, no active job, service match)
     const eligiblePartners = await findEligiblePartnersFromDb(serviceObj.id, lat, lon, 2.0);
@@ -122,7 +175,7 @@ export async function createRequest(req, res, next) {
       customer_phone: customerPhone,
     };
 
-    // Initiate Socket.IO matching offer loop
+    // Initiate Socket.IO matching broadcast offer loop
     const dispatchResult = await startRequestMatching(fullRequestRecord, eligiblePartners);
 
     return res.status(201).json({
@@ -385,6 +438,15 @@ export async function respondToRequest(req, res, next) {
 
     if (decision === 'accept') {
       const result = await handlePartnerAccept(requestId, partnerId);
+      if (!result.success) {
+        // Requirement: Never an error page and never an HTTP 500
+        return res.status(result.reason === 'taken' ? 409 : 400).json({
+          status: 'fail',
+          code: result.reason,
+          message: result.message,
+          data: result,
+        });
+      }
       return res.status(200).json({
         status: 'success',
         message: 'Work order accepted.',
@@ -399,7 +461,11 @@ export async function respondToRequest(req, res, next) {
       });
     }
   } catch (err) {
-    next(err);
+    // Graceful error fallback - never 500
+    return res.status(400).json({
+      status: 'fail',
+      message: err.message || 'Unable to process response.',
+    });
   }
 }
 

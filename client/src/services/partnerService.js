@@ -888,10 +888,26 @@ export async function acceptIncomingJob(jobData) {
   const reqId = jobData?.id || jobData?.request_id;
   try {
     if (reqId) {
-      await post(`/api/requests/${reqId}/respond`, { decision: 'accept' });
+      const res = await post(`/api/requests/${reqId}/respond`, { decision: 'accept' });
+      if (res && res.status === 'success') {
+        const newActiveJob = {
+          ...jobData,
+          id: reqId,
+          status: 'accepted',
+          step_index: 1,
+          accepted_at: new Date().toISOString(),
+        };
+        setActiveJob(newActiveJob);
+        return { success: true, activeJob: newActiveJob };
+      }
     }
   } catch (apiErr) {
-    console.warn('[PartnerService Accept API Warning]:', apiErr.message);
+    console.warn('[PartnerService Accept API Notice]:', apiErr.message);
+    return {
+      success: false,
+      reason: 'taken',
+      message: apiErr.message || 'Request accepted by another partner',
+    };
   }
 
   const newActiveJob = {
@@ -903,7 +919,7 @@ export async function acceptIncomingJob(jobData) {
   };
 
   setActiveJob(newActiveJob);
-  return newActiveJob;
+  return { success: true, activeJob: newActiveJob };
 }
 
 /**

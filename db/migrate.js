@@ -38,8 +38,24 @@ async function runMigration() {
     await client.query('BEGIN');
     console.log('Applying FixIt Now database schema...');
     await client.query(sql);
+
+    // Apply migrations from db/migrations if present
+    const migrationsDir = path.resolve(__dirname, 'migrations');
+    if (fs.existsSync(migrationsDir)) {
+      const migrationFiles = fs
+        .readdirSync(migrationsDir)
+        .filter((file) => file.endsWith('.sql'))
+        .sort();
+
+      for (const mFile of migrationFiles) {
+        console.log(`Applying migration: ${mFile}`);
+        const mSql = fs.readFileSync(path.join(migrationsDir, mFile), 'utf8');
+        await client.query(mSql);
+      }
+    }
+
     await client.query('COMMIT');
-    console.log('✓ FixIt Now schema applied successfully!');
+    console.log('✓ FixIt Now schema and migrations applied successfully!');
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Schema migration error:', err);

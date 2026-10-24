@@ -30,6 +30,78 @@ export default function AdminKycReviewView() {
 
   const [loadError, setLoadError] = useState(null);
 
+  // Document Inspection Modal State
+  const [viewingDocModal, setViewingDocModal] = useState(false);
+  const [activeDocIndex, setActiveDocIndex] = useState(0);
+
+  const getAuthToken = () => {
+    try {
+      return localStorage.getItem('fixit_token') || '';
+    } catch {
+      return '';
+    }
+  };
+
+  const getSecureUrl = (baseUrl) => {
+    if (!baseUrl) return '';
+    const token = getAuthToken();
+    if (!token) return baseUrl;
+    return `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+  };
+
+  const getDossierDocs = (dossier) => {
+    if (!dossier) return [];
+    const list = [];
+    if (dossier.photo_url) {
+      list.push({
+        id: 'photo',
+        title: 'Passport Photograph',
+        name: dossier.photo_name || 'Passport_Photo.jpg',
+        url: dossier.photo_url,
+        type: 'image',
+      });
+    }
+    if (dossier.document_url) {
+      list.push({
+        id: 'govt_id',
+        title: dossier.govt_id_type || 'Government Identity Card',
+        name: dossier.document_name || 'Government_ID.pdf',
+        url: dossier.document_url,
+        type: dossier.document_name?.match(/\.(jpg|jpeg|png)$/i) ? 'image' : 'pdf',
+      });
+    }
+    if (dossier.trade_cert_url) {
+      list.push({
+        id: 'trade_cert',
+        title: 'Trade License / Certification',
+        name: dossier.trade_cert_name || 'Trade_Certificate.pdf',
+        url: dossier.trade_cert_url,
+        type: dossier.trade_cert_name?.match(/\.(jpg|jpeg|png)$/i) ? 'image' : 'pdf',
+      });
+    }
+    if (Array.isArray(dossier.documents)) {
+      dossier.documents.forEach((d) => {
+        const url = d.download_url || `/api/partner/kyc/document/${d.id}`;
+        if (!list.some((existing) => existing.url === url)) {
+          list.push({
+            id: `doc-${d.id}`,
+            title: d.document_type || d.original_name,
+            name: d.original_name || d.file_name,
+            url,
+            type: (d.file_type || '').startsWith('image/') || (d.original_name || '').match(/\.(jpg|jpeg|png)$/i) ? 'image' : 'pdf',
+          });
+        }
+      });
+    }
+    return list;
+  };
+
+  const openDocViewer = (dossier, docIndex = 0) => {
+    setSelectedDossier(dossier);
+    setActiveDocIndex(docIndex);
+    setViewingDocModal(true);
+  };
+
   const loadData = async (currentFilter = filter) => {
     setLoading(true);
     setLoadError(null);
@@ -218,18 +290,48 @@ export default function AdminKycReviewView() {
                 className="bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] p-5 shadow-hard flex flex-col justify-between"
               >
                 <div>
-                  {/* Top Dossier Bar */}
-                  <div className="flex items-start justify-between border-b-2 border-[var(--theme-border)] pb-3 mb-4">
-                    <div>
-                      <span className="font-mono text-[10px] text-[var(--theme-text-muted)] uppercase tracking-widest block">
-                        DOSSIER #KYC-{String(dossier.id).padStart(4, '0')} · PARTNER #{dossier.partner_id}
-                      </span>
-                      <h3 className="text-xl font-display font-extrabold text-[var(--theme-text-main)]">
-                        {dossier.partner_name}
-                      </h3>
-                      <span className="font-mono text-xs text-signal font-bold block">
-                        {dossier.service_name}
-                      </span>
+                  {/* Top Dossier Bar with Photo Avatar */}
+                  <div className="flex items-start justify-between border-b-2 border-[var(--theme-border)] pb-3 mb-4 gap-3">
+                    <div className="flex items-start gap-3">
+                      {dossier.photo_url ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const docs = getDossierDocs(dossier);
+                            const idx = docs.findIndex((d) => d.id === 'photo');
+                            openDocViewer(dossier, idx >= 0 ? idx : 0);
+                          }}
+                          title="Click to view full photo"
+                          className="w-14 h-14 border-2 border-[var(--theme-border)] bg-[var(--theme-surface-sub)] overflow-hidden shrink-0 group hover:border-signal cursor-pointer relative"
+                        >
+                          <img
+                            src={getSecureUrl(dossier.photo_url)}
+                            alt={dossier.partner_name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                          <span className="absolute inset-0 bg-ink/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[9px] text-paper font-mono font-bold">
+                            VIEW
+                          </span>
+                        </button>
+                      ) : (
+                        <div className="w-14 h-14 border-2 border-[var(--theme-border)] bg-[var(--theme-surface-sub)] flex items-center justify-center font-mono font-bold text-xs text-[var(--theme-text-muted)] shrink-0">
+                          KYC
+                        </div>
+                      )}
+                      <div>
+                        <span className="font-mono text-[10px] text-[var(--theme-text-muted)] uppercase tracking-widest block">
+                          DOSSIER #KYC-{String(dossier.id).padStart(4, '0')} · PARTNER #{dossier.partner_id}
+                        </span>
+                        <h3 className="text-xl font-display font-extrabold text-[var(--theme-text-main)]">
+                          {dossier.partner_name}
+                        </h3>
+                        <span className="font-mono text-xs text-signal font-bold block">
+                          {dossier.service_name}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Rubber Stamp */}
@@ -295,14 +397,17 @@ export default function AdminKycReviewView() {
                         </div>
                       </div>
                       {dossier.document_url ? (
-                        <a
-                          href={dossier.document_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[10px] font-bold text-signal underline hover:text-[var(--theme-text-main)] border border-signal px-2 py-1 min-h-[32px] flex items-center shrink-0"
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const docs = getDossierDocs(dossier);
+                            const idx = docs.findIndex((d) => d.id === 'govt_id');
+                            openDocViewer(dossier, idx >= 0 ? idx : 0);
+                          }}
+                          className="text-[10px] font-bold text-signal underline hover:text-[var(--theme-text-main)] border border-signal px-2 py-1 min-h-[32px] flex items-center gap-1 shrink-0 cursor-pointer"
                         >
-                          VIEW DOCUMENT ↗
-                        </a>
+                          <span>👁️</span> VIEW DOCUMENT
+                        </button>
                       ) : (
                         <span className="text-[10px] font-bold text-done border border-done px-1.5 py-0.5 shrink-0">
                           SUBMITTED
@@ -322,14 +427,17 @@ export default function AdminKycReviewView() {
                         </div>
                       </div>
                       {dossier.photo_url ? (
-                        <a
-                          href={dossier.photo_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[10px] font-bold text-signal underline hover:text-[var(--theme-text-main)] border border-signal px-2 py-1 min-h-[32px] flex items-center shrink-0"
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const docs = getDossierDocs(dossier);
+                            const idx = docs.findIndex((d) => d.id === 'photo');
+                            openDocViewer(dossier, idx >= 0 ? idx : 0);
+                          }}
+                          className="text-[10px] font-bold text-signal underline hover:text-[var(--theme-text-main)] border border-signal px-2 py-1 min-h-[32px] flex items-center gap-1 shrink-0 cursor-pointer"
                         >
-                          VIEW PHOTO ↗
-                        </a>
+                          <span>👁️</span> VIEW PHOTO
+                        </button>
                       ) : (
                         <span className="text-[10px] font-bold text-done border border-done px-1.5 py-0.5 shrink-0">
                           PHOTO
@@ -349,14 +457,17 @@ export default function AdminKycReviewView() {
                         </div>
                       </div>
                       {dossier.trade_cert_url ? (
-                        <a
-                          href={dossier.trade_cert_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[10px] font-bold text-signal underline hover:text-[var(--theme-text-main)] border border-signal px-2 py-1 min-h-[32px] flex items-center shrink-0"
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const docs = getDossierDocs(dossier);
+                            const idx = docs.findIndex((d) => d.id === 'trade_cert');
+                            openDocViewer(dossier, idx >= 0 ? idx : 0);
+                          }}
+                          className="text-[10px] font-bold text-signal underline hover:text-[var(--theme-text-main)] border border-signal px-2 py-1 min-h-[32px] flex items-center gap-1 shrink-0 cursor-pointer"
                         >
-                          VIEW CERT ↗
-                        </a>
+                          <span>👁️</span> VIEW CERT
+                        </button>
                       ) : (
                         <span className="text-[10px] font-bold text-signal border border-signal px-1.5 py-0.5 shrink-0">
                           {dossier.trade_cert_name !== 'Not Provided' ? 'PROVIDED' : 'OPTIONAL'}
@@ -382,57 +493,237 @@ export default function AdminKycReviewView() {
                 </div>
 
                 {/* Dossier Bottom Action Buttons */}
-                <div className="pt-4 border-t-2 border-[var(--theme-border)] flex flex-wrap gap-2">
-                  {isPending && (
-                    <>
+                <div className="pt-4 border-t-2 border-[var(--theme-border)] space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => openDocViewer(dossier, 0)}
+                    className="w-full border-2 border-[var(--theme-border)] bg-[var(--theme-surface-sub)] hover:border-signal hover:text-signal text-[var(--theme-text-main)] px-3 py-2 text-xs font-mono font-bold flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer"
+                  >
+                    <span>📂</span> INSPECT DOSSIER &amp; ALL DOCUMENTS ({getDossierDocs(dossier).length})
+                  </button>
+
+                  <div className="flex flex-wrap gap-2">
+                    {isPending && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={actionLoading}
+                          onClick={() => handleApprove(dossier.partner_id, dossier.partner_name)}
+                          className="btn-primary flex-1 min-h-[44px] text-xs font-mono font-bold flex items-center justify-center gap-1.5"
+                        >
+                          <span>✓</span> APPROVE &amp; UNLOCK
+                        </button>
+                        <button
+                          type="button"
+                          disabled={actionLoading}
+                          onClick={() => openRejectModal(dossier)}
+                          className="border-2 border-[#B83A14] bg-paper dark:bg-ink text-[#B83A14] hover:bg-[#B83A14] hover:text-paper px-4 py-2 text-xs font-mono font-bold transition-colors min-h-[44px]"
+                        >
+                          ✕ REJECT WITH REASON
+                        </button>
+                      </>
+                    )}
+
+                    {isRejected && (
                       <button
                         type="button"
                         disabled={actionLoading}
                         onClick={() => handleApprove(dossier.partner_id, dossier.partner_name)}
-                        className="btn-primary flex-1 min-h-[44px] text-xs font-mono font-bold flex items-center justify-center gap-1.5"
+                        className="btn-secondary w-full min-h-[44px] text-xs font-mono font-bold"
                       >
-                        <span>✓</span> APPROVE &amp; UNLOCK
+                        ↺ OVERRIDE &amp; APPROVE KYC
                       </button>
-                      <button
-                        type="button"
-                        disabled={actionLoading}
-                        onClick={() => openRejectModal(dossier)}
-                        className="border-2 border-[#B83A14] bg-paper dark:bg-ink text-[#B83A14] hover:bg-[#B83A14] hover:text-paper px-4 py-2 text-xs font-mono font-bold transition-colors min-h-[44px]"
-                      >
-                        ✕ REJECT WITH REASON
-                      </button>
-                    </>
-                  )}
+                    )}
 
-                  {isRejected && (
-                    <button
-                      type="button"
-                      disabled={actionLoading}
-                      onClick={() => handleApprove(dossier.partner_id, dossier.partner_name)}
-                      className="btn-secondary w-full min-h-[44px] text-xs font-mono font-bold"
-                    >
-                      ↺ OVERRIDE &amp; APPROVE KYC
-                    </button>
-                  )}
-
-                  {isVerified && (
-                    <div className="w-full flex items-center justify-between font-mono text-xs text-done">
-                      <span>✓ KYC APPROVED &amp; ACTIVE</span>
-                      <button
-                        type="button"
-                        onClick={() => openRejectModal(dossier)}
-                        className="text-[#B83A14] underline text-[11px]"
-                      >
-                        Revoke Verification
-                      </button>
-                    </div>
-                  )}
+                    {isVerified && (
+                      <div className="w-full flex items-center justify-between font-mono text-xs text-done">
+                        <span>✓ KYC APPROVED &amp; ACTIVE</span>
+                        <button
+                          type="button"
+                          onClick={() => openRejectModal(dossier)}
+                          className="text-[#B83A14] underline text-[11px] cursor-pointer"
+                        >
+                          Revoke Verification
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
       )}
+
+      {/* ============================================================== */}
+      {/* DOCUMENT & IMAGE INSPECTION MODAL (FR-A4)                       */}
+      {/* ============================================================== */}
+      {viewingDocModal && selectedDossier && (() => {
+        const docs = getDossierDocs(selectedDossier);
+        const activeDoc = docs[activeDocIndex] || docs[0] || null;
+        const secureUrl = activeDoc ? getSecureUrl(activeDoc.url) : '';
+
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-ink/80 flex items-center justify-center p-3 sm:p-6"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] w-full max-w-4xl max-h-[92vh] flex flex-col shadow-hard">
+              {/* Modal Header */}
+              <div className="p-4 border-b-2 border-[var(--theme-border)] flex items-center justify-between gap-3 bg-[var(--theme-surface-sub)]">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-signal">
+                      KYC DOCUMENT INSPECTION · FR-A4
+                    </span>
+                    <span className="font-mono text-xs text-[var(--theme-text-muted)]">
+                      · Partner #{selectedDossier.partner_id}
+                    </span>
+                  </div>
+                  <h3 className="font-display font-extrabold text-lg sm:text-xl text-[var(--theme-text-main)]">
+                    {selectedDossier.partner_name} — {selectedDossier.service_name}
+                  </h3>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {selectedDossier.status === 'verified' && (
+                    <span className="stamp-badge border-done text-done bg-[#EAF8F0] dark:bg-[#0D2E1A] text-xs">
+                      VERIFIED
+                    </span>
+                  )}
+                  {selectedDossier.status === 'pending' && (
+                    <span className="stamp-badge border-signal text-signal bg-[#FFF5F2] dark:bg-[#3D140C] text-xs">
+                      PENDING
+                    </span>
+                  )}
+                  {selectedDossier.status === 'rejected' && (
+                    <span className="stamp-badge border-[#B83A14] text-[#B83A14] bg-[#FFEBEB] dark:bg-[#3B1111] text-xs">
+                      REJECTED
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setViewingDocModal(false)}
+                    className="w-8 h-8 border-2 border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-text-main)] font-mono font-bold text-sm hover:border-signal hover:text-signal cursor-pointer"
+                    aria-label="Close document viewer"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* Document Tabs */}
+              {docs.length > 0 ? (
+                <div className="flex flex-wrap border-b-2 border-[var(--theme-border)] bg-[var(--theme-surface)] px-2 pt-2 gap-1">
+                  {docs.map((doc, idx) => {
+                    const isActive = idx === activeDocIndex;
+                    return (
+                      <button
+                        key={doc.id || idx}
+                        type="button"
+                        onClick={() => setActiveDocIndex(idx)}
+                        className={`px-3 py-2 font-mono text-xs font-bold uppercase tracking-wider border-t-2 border-l-2 border-r-2 -mb-[2px] transition-colors flex items-center gap-1.5 cursor-pointer ${
+                          isActive
+                            ? 'bg-[var(--theme-surface)] text-signal border-[var(--theme-border)] border-b-transparent z-10'
+                            : 'bg-[var(--theme-surface-sub)] text-[var(--theme-text-muted)] border-transparent hover:text-[var(--theme-text-main)]'
+                        }`}
+                      >
+                        <span>{doc.type === 'image' ? '🖼️' : '📄'}</span>
+                        <span>{doc.title}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              {/* Document Preview Canvas */}
+              <div className="flex-1 overflow-auto p-4 bg-[#121212]/5 dark:bg-[#121212]/40 flex flex-col items-center justify-center min-h-[350px]">
+                {activeDoc ? (
+                  <div className="w-full flex flex-col items-center">
+                    <div className="w-full flex items-center justify-between text-xs font-mono text-[var(--theme-text-soft)] mb-2 px-1">
+                      <span className="truncate max-w-[70%]">
+                        File: <strong>{activeDoc.name}</strong>
+                      </span>
+                      <a
+                        href={secureUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-signal underline font-bold hover:text-[var(--theme-text-main)] cursor-pointer"
+                      >
+                        Open In New Window ↗
+                      </a>
+                    </div>
+
+                    {activeDoc.type === 'image' ? (
+                      <div className="w-full flex justify-center p-2 bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] shadow-hard-sm">
+                        <img
+                          src={secureUrl}
+                          alt={activeDoc.title}
+                          className="max-h-[50vh] max-w-full object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-full bg-[var(--theme-surface)] border-2 border-[var(--theme-border)] shadow-hard-sm">
+                        <iframe
+                          src={secureUrl}
+                          title={activeDoc.title}
+                          className="w-full h-[52vh] border-0"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-8 text-center font-mono text-xs text-[var(--theme-text-muted)]">
+                    No documents found for this partner dossier.
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer / Status Update Controls */}
+              <div className="p-4 border-t-2 border-[var(--theme-border)] bg-[var(--theme-surface)] flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="font-mono text-xs text-[var(--theme-text-soft)]">
+                  Verify credentials, then update KYC status:
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    disabled={actionLoading}
+                    onClick={async () => {
+                      await handleApprove(selectedDossier.partner_id, selectedDossier.partner_name);
+                      setViewingDocModal(false);
+                    }}
+                    className="btn-primary flex-1 sm:flex-initial px-4 py-2.5 text-xs font-mono font-bold flex items-center justify-center gap-1.5 min-h-[44px]"
+                  >
+                    <span>✓</span> APPROVE &amp; UNLOCK
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={actionLoading}
+                    onClick={() => {
+                      setViewingDocModal(false);
+                      openRejectModal(selectedDossier);
+                    }}
+                    className="border-2 border-[#B83A14] bg-paper dark:bg-ink text-[#B83A14] hover:bg-[#B83A14] hover:text-paper px-4 py-2.5 text-xs font-mono font-bold transition-colors flex-1 sm:flex-initial min-h-[44px]"
+                  >
+                    ✕ REJECT WITH REASON
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setViewingDocModal(false)}
+                    className="btn-secondary px-4 py-2.5 text-xs font-mono font-bold min-h-[44px]"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ============================================================== */}
       {/* REJECTION REASON MODAL (MANDATORY REASON PER FR-A4)             */}

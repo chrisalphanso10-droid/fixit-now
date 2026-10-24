@@ -8,6 +8,7 @@
     "start": "node src/server.js",
     "dev": "node --watch-path=src src/server.js",
     "test": "node test/matching.test.js",
+    "test:concurrency": "node tests/concurrency/concurrency.test.js",
     "db:schema": "node ../db/migrate.js",
     "db:seed": "node ../db/seed.js",
     "db:demo": "node ../db/demo-seed.js"

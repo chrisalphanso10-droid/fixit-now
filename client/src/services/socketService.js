@@ -137,6 +137,16 @@ export function onRequestCancelled(callback) {
 }
 
 /**
+ * Subscribes to request taken events (when another partner accepted the job)
+ */
+export function onRequestTaken(callback) {
+  const s = getSocket();
+  const handler = (data) => callback(data);
+  s.on('request_taken', handler);
+  return () => s.off('request_taken', handler);
+}
+
+/**
  * Subscribes to request acceptance events (Customer side)
  */
 export function onRequestAccepted(callback) {
@@ -234,6 +244,7 @@ export default {
   onRequestTimeout,
   onRequestCancelled,
   onRequestAccepted,
+  onRequestTaken,
   onSearchingUpdate,
   onAllPartnersBusy,
   onPartnerLocation,

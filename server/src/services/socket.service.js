@@ -46,6 +46,44 @@ export function initSocketServer(httpServer) {
       socket.join(room);
       socket.partnerId = String(partnerId);
       socket.emit('registered', { role: 'partner', partnerId });
+
+      // On connect or reconnect: load open requests for this partner if eligible
+      for (const [reqId, state] of activeDispatches.entries()) {
+        if (
+          state.status === 'searching' &&
+          !state.declinedPartnerIds.has(String(partnerId))
+        ) {
+          const partner = state.eligiblePartners.find((p) => String(p.id) === String(partnerId));
+          if (partner) {
+            const remainingSeconds = Math.max(1, Math.round((state.expiresAt - Date.now()) / 1000));
+            const etaMinutes =
+              partner.eta_minutes ||
+              Math.max(5, Math.round(Number(partner.distance_km || 1) * 6 + 5));
+
+            socket.emit('incoming_request', {
+              job: {
+                id: state.request.id,
+                request_id: state.request.id,
+                order_number: state.request.order_number,
+                customer_id: state.request.customer_id,
+                customer_name: state.request.customer_name || 'Customer',
+                customer_phone: state.request.customer_phone || '',
+                service_id: state.request.service_id,
+                service_name: state.request.service_name || partner.service_name || 'Service',
+                problem: state.request.problem,
+                description: state.request.description,
+                address: state.request.address,
+                distance_km: partner.distance_km,
+                eta_minutes: etaMinutes,
+                photo_url: state.request.photo_url || null,
+                created_at: state.request.created_at || new Date().toISOString(),
+                service_otp: state.request.service_otp,
+              },
+              countdown: remainingSeconds,
+            });
+          }
+        }
+      }
     });
 
     // 2. Customer registration
@@ -109,6 +147,14 @@ export function initSocketServer(httpServer) {
  * @param {Array<object>} eligiblePartners Array of eligible partners sorted nearest first
  * @param {number} [customCountdown] Optional countdown override (seconds)
  */
+/**
+ * Initiates the real-time matching and broadcast offer loop for a customer request.
+ * Conforms to Item 1: sends at the same moment to every eligible partner.
+ *
+ * @param {object} request The newly created request record from DB
+ * @param {Array<object>} eligiblePartners Array of eligible partners within 2 km
+ * @param {number} [customCountdown] Optional countdown override (seconds)
+ */
 export async function startRequestMatching(request, eligiblePartners = [], customCountdown = null) {
   const countdownSeconds =
     customCountdown ||
@@ -161,21 +207,21 @@ export async function startRequestMatching(request, eligiblePartners = [], custo
     };
   }
 
-  // Case 2: One or more eligible partners available. Begin sequential dispatch.
+  // Case 2: One or more eligible partners available. Broadcast to ALL simultaneously.
   const state = {
     requestId: request.id,
     request: requestPayload,
     eligiblePartners,
-    currentIndex: 0,
+    declinedPartnerIds: new Set(),
     countdownSeconds,
+    expiresAt: Date.now() + countdownSeconds * 1000,
     timer: null,
-    status: 'offering',
+    status: 'searching',
   };
 
   activeDispatches.set(String(request.id), state);
 
-  // Offer to the nearest partner (index 0)
-  offerToCurrentPartner(String(request.id));
+  broadcastToEligiblePartners(String(request.id));
 
   return {
     success: true,
@@ -186,66 +232,59 @@ export async function startRequestMatching(request, eligiblePartners = [], custo
 }
 
 /**
- * Offers the request to the partner at `state.currentIndex` with a countdown timer.
- * If index exceeds partner list, marks the request as "all partners busy".
+ * Broadcasts the incoming request to all eligible partners simultaneously.
+ * Single countdown timer for the whole request.
  *
  * @param {string} requestId
  */
-function offerToCurrentPartner(requestId) {
+function broadcastToEligiblePartners(requestId) {
   const state = activeDispatches.get(String(requestId));
-  if (!state || state.status !== 'offering') {
+  if (!state || state.status !== 'searching') {
     return;
   }
 
-  // Clear any existing timer
   if (state.timer) {
     clearTimeout(state.timer);
     state.timer = null;
   }
 
-  // If we have exhausted all eligible partners
-  if (state.currentIndex >= state.eligiblePartners.length) {
-    handleMatchingExhausted(requestId);
-    return;
+  for (const partner of state.eligiblePartners) {
+    const etaMinutes =
+      partner.eta_minutes ||
+      Math.max(5, Math.round(Number(partner.distance_km || 1) * 6 + 5));
+
+    const incomingJobPayload = {
+      id: state.request.id,
+      request_id: state.request.id,
+      order_number: state.request.order_number,
+      customer_id: state.request.customer_id,
+      customer_name: state.request.customer_name || 'Customer',
+      customer_phone: state.request.customer_phone || '',
+      service_id: state.request.service_id,
+      service_name: state.request.service_name || partner.service_name || 'Service',
+      problem: state.request.problem,
+      description: state.request.description,
+      address: state.request.address,
+      distance_km: partner.distance_km,
+      eta_minutes: etaMinutes,
+      photo_url: state.request.photo_url || null,
+      created_at: state.request.created_at || new Date().toISOString(),
+      service_otp: state.request.service_otp,
+    };
+
+    if (io) {
+      io.to(`partner:${partner.id}`).emit('incoming_request', {
+        job: incomingJobPayload,
+        countdown: state.countdownSeconds,
+      });
+    }
   }
 
-  const currentPartner = state.eligiblePartners[state.currentIndex];
-  const etaMinutes =
-    currentPartner.eta_minutes ||
-    Math.max(5, Math.round(Number(currentPartner.distance_km || 1) * 6 + 5));
-
-  const incomingJobPayload = {
-    id: state.request.id,
-    request_id: state.request.id,
-    order_number: state.request.order_number,
-    customer_id: state.request.customer_id,
-    customer_name: state.request.customer_name || 'Customer',
-    customer_phone: state.request.customer_phone || '',
-    service_id: state.request.service_id,
-    service_name: state.request.service_name || currentPartner.service_name || 'Service',
-    problem: state.request.problem,
-    description: state.request.description,
-    address: state.request.address,
-    distance_km: currentPartner.distance_km,
-    eta_minutes: etaMinutes,
-    photo_url: state.request.photo_url || null,
-    created_at: state.request.created_at || new Date().toISOString(),
-    service_otp: state.request.service_otp,
-  };
-
   if (io) {
-    // 1. Emit incoming request popup event to the specific partner
-    io.to(`partner:${currentPartner.id}`).emit('incoming_request', {
-      job: incomingJobPayload,
-      countdown: state.countdownSeconds,
-    });
-
-    // 2. Emit status update to the waiting customer
     const searchUpdate = {
       requestId: state.request.id,
       order_number: state.request.order_number,
       status: 'searching',
-      attemptingPartnerIndex: state.currentIndex + 1,
       totalEligible: state.eligiblePartners.length,
       countdown: state.countdownSeconds,
     };
@@ -254,120 +293,316 @@ function offerToCurrentPartner(requestId) {
     io.to(`request:${state.request.id}`).emit('searching_update', searchUpdate);
   }
 
-  // Start the countdown timer (default 30 seconds)
+  // Single countdown timer for the whole request
   state.timer = setTimeout(async () => {
-    // Notify the partner that this request offer timed out
-    if (io) {
-      io.to(`partner:${currentPartner.id}`).emit('request_timeout', {
-        requestId: state.request.id,
-        order_number: state.request.order_number,
-        message: 'Request offer timed out. You remain online for next dispatch.',
-      });
-    }
-
-    // Cascade to next nearest eligible partner automatically
-    state.currentIndex++;
-    offerToCurrentPartner(requestId);
+    await handleMatchingTimeout(requestId);
   }, state.countdownSeconds * 1000);
 }
 
 /**
- * Partner accepts the incoming job offer
+ * Helper to build the standardized accepted payload
+ */
+function formatAcceptedPayload(requestRecord, partnerRecord, originalRequest = {}) {
+  const distanceKm = partnerRecord.distance_km != null ? Number(partnerRecord.distance_km) : 0.8;
+  const etaMinutes =
+    partnerRecord.eta_minutes ||
+    Math.max(5, Math.round(Number(distanceKm) * 6 + 5));
+
+  const partnerProfile = {
+    id: partnerRecord.id,
+    name: partnerRecord.name,
+    phone: partnerRecord.phone,
+    service_id: partnerRecord.service_id,
+    service_name: partnerRecord.service_name || originalRequest.service_name,
+    rating: partnerRecord.rating,
+    total_jobs: partnerRecord.total_jobs,
+    badge: partnerRecord.badge || 'Certified Tradesperson',
+    vehicle: partnerRecord.vehicle || 'Standard Service Vehicle',
+    distance_km: distanceKm,
+    eta_minutes: etaMinutes,
+    photo_url: partnerRecord.photo_url || null,
+  };
+
+  const orderNumber =
+    requestRecord.order_number ||
+    originalRequest.order_number ||
+    `ORD-${String(requestRecord.id).replace(/-/g, '').slice(0, 4).toUpperCase()}`;
+
+  return {
+    requestId: requestRecord.id,
+    order_number: orderNumber,
+    status: 'accepted',
+    step_index: 1,
+    partner: partnerProfile,
+    service_otp: requestRecord.service_otp || originalRequest.service_otp,
+    address: requestRecord.address || originalRequest.address,
+    problem: requestRecord.problem || originalRequest.problem,
+    service_name: partnerRecord.service_name || originalRequest.service_name,
+  };
+}
+
+/**
+ * Partner accepts the incoming job offer.
+ * Enforces atomic database transaction with partner row lock (SELECT ... FOR UPDATE),
+ * eligibility re-checks, and unique partial active job constraint.
  *
  * @param {string} requestId
  * @param {string} partnerId
  */
 export async function handlePartnerAccept(requestId, partnerId) {
-  const state = activeDispatches.get(String(requestId));
-  if (!state) {
-    throw new Error('This request dispatch is no longer active or has expired.');
-  }
+  const client = await db.getClient();
 
-  const currentPartner = state.eligiblePartners[state.currentIndex];
-  if (!currentPartner || String(currentPartner.id) !== String(partnerId)) {
-    throw new Error(
-      `This request was offered to partner ${currentPartner?.id} (${currentPartner?.name}), but accept called by partner ${partnerId}.`
+  try {
+    await client.query('BEGIN');
+
+    // 1. Lock partner row to serialize concurrent accept calls by this partner
+    const partnerRes = await client.query(
+      `SELECT p.*, s.name AS service_name
+       FROM partners p
+       JOIN services s ON p.service_id = s.id
+       WHERE p.id = $1 FOR UPDATE`,
+      [partnerId]
     );
+
+    if (partnerRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return { success: false, reason: 'not_found', message: 'Partner not found.' };
+    }
+    const partner = partnerRes.rows[0];
+
+    // 2. Fetch the request to verify service match & current status
+    const reqRes = await client.query(
+      `SELECT r.*, s.name AS service_name, s.base_price_estimate, c.name AS customer_name, c.phone AS customer_phone
+       FROM requests r
+       JOIN services s ON r.service_id = s.id
+       JOIN customers c ON r.customer_id = c.id
+       WHERE r.id = $1`,
+      [requestId]
+    );
+
+    if (reqRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return { success: false, reason: 'not_found', message: 'Request not found.' };
+    }
+    const request = reqRes.rows[0];
+
+    // Requirement d: Double-click or retried Accept from the same partner is idempotent
+    if (request.status === 'accepted' && String(request.partner_id) === String(partnerId)) {
+      await client.query('COMMIT');
+      return {
+        success: true,
+        idempotent: true,
+        request: formatAcceptedPayload(request, partner, request),
+      };
+    }
+
+    // Already accepted by another partner
+    if (request.status === 'accepted' && request.partner_id && String(request.partner_id) !== String(partnerId)) {
+      await client.query('ROLLBACK');
+      return {
+        success: false,
+        reason: 'taken',
+        message: 'Request accepted by another partner',
+      };
+    }
+
+    // Cancelled or expired
+    if (request.status === 'cancelled') {
+      await client.query('ROLLBACK');
+      const isExpired =
+        request.cancel_reason?.includes('busy') ||
+        request.cancel_reason?.includes('expired') ||
+        request.cancel_reason?.includes('outside 2 km');
+      return {
+        success: false,
+        reason: 'cancelled',
+        message: isExpired ? 'Request offer has expired' : 'Request was cancelled by customer',
+      };
+    }
+
+    if (request.status !== 'searching' && request.status !== 'requested') {
+      await client.query('ROLLBACK');
+      return {
+        success: false,
+        reason: 'unavailable',
+        message: 'Request is no longer available',
+      };
+    }
+
+    // Re-check partner eligibility INSIDE the accept transaction
+    // Rule: Offers the requested service
+    if (Number(partner.service_id) !== Number(request.service_id)) {
+      await client.query('ROLLBACK');
+      return {
+        success: false,
+        reason: 'wrong_service',
+        message: 'You do not offer this service category.',
+      };
+    }
+
+    // Rule: Online
+    if (!partner.online) {
+      await client.query('ROLLBACK');
+      return {
+        success: false,
+        reason: 'offline',
+        message: 'Partner is currently offline.',
+      };
+    }
+
+    // Rule: KYC verified (not pending, not rejected)
+    if (partner.kyc_status !== 'verified') {
+      await client.query('ROLLBACK');
+      return {
+        success: false,
+        reason: 'unverified',
+        message: 'Partner KYC is not verified.',
+      };
+    }
+
+    // Rule: Active subscription
+    const subRes = await client.query(
+      `SELECT id FROM subscriptions
+       WHERE partner_id = $1 AND status = 'active' AND end_date > CURRENT_TIMESTAMP
+       LIMIT 1`,
+      [partnerId]
+    );
+    if (subRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return {
+        success: false,
+        reason: 'expired_plan',
+        message: 'Active subscription plan required.',
+      };
+    }
+
+    // Rule: Not on another active job (Requirement e: returns "you are already on a job")
+    const activeJobRes = await client.query(
+      `SELECT id FROM requests
+       WHERE partner_id = $1
+         AND status IN ('accepted', 'partner_on_way', 'partner_arrived', 'service_started')
+       LIMIT 1`,
+      [partnerId]
+    );
+    if (activeJobRes.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return {
+        success: false,
+        reason: 'already_on_job',
+        message: 'you are already on a job',
+      };
+    }
+
+    // Requirement a: Atomic conditional update
+    const updateRes = await client.query(
+      `UPDATE requests
+       SET partner_id = $1, status = 'accepted', updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2 AND (status = 'searching' OR status = 'requested') AND partner_id IS NULL
+       RETURNING *`,
+      [partnerId, requestId]
+    );
+
+    if (updateRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      const recheck = await db.query('SELECT status, partner_id, cancel_reason FROM requests WHERE id = $1', [requestId]);
+      const curr = recheck.rows[0];
+      if (curr?.status === 'accepted') {
+        return { success: false, reason: 'taken', message: 'Request accepted by another partner' };
+      } else if (curr?.status === 'cancelled') {
+        const isExp =
+          curr.cancel_reason?.includes('busy') ||
+          curr.cancel_reason?.includes('expired') ||
+          curr.cancel_reason?.includes('outside 2 km');
+        return {
+          success: false,
+          reason: 'cancelled',
+          message: isExp ? 'Request offer has expired' : 'Request was cancelled by customer',
+        };
+      }
+      return { success: false, reason: 'taken', message: 'Request accepted by another partner' };
+    }
+
+    // Exactly one status-log entry for accepted
+    await client.query(
+      `INSERT INTO request_status_logs (request_id, status) VALUES ($1, 'accepted')`,
+      [requestId]
+    );
+
+    await client.query('COMMIT');
+
+    // Cancel time-out timer so it does not fire after accept
+    const state = activeDispatches.get(String(requestId));
+    if (state && state.timer) {
+      clearTimeout(state.timer);
+      state.timer = null;
+    }
+    if (state) {
+      state.status = 'accepted';
+      state.acceptedPartnerId = partnerId;
+    }
+
+    const acceptedPayload = formatAcceptedPayload(updateRes.rows[0], partner, request);
+
+    if (io) {
+      io.to(`customer:${request.customer_id}`).emit('request_accepted', acceptedPayload);
+      io.to(`request:${requestId}`).emit('request_accepted', acceptedPayload);
+
+      io.to(`partner:${partnerId}`).emit('request_confirmed', {
+        ...acceptedPayload,
+        job: {
+          ...request,
+          ...updateRes.rows[0],
+          status: 'accepted',
+          step_index: 1,
+          partner: acceptedPayload.partner,
+        },
+      });
+
+      // Requirement g: After accept, every other partner gets a "request taken" socket event
+      const takenPayload = {
+        requestId,
+        order_number: acceptedPayload.order_number,
+        message: 'Request accepted by another partner',
+        reason: 'TAKEN_BY_ANOTHER_PARTNER',
+      };
+
+      if (state && Array.isArray(state.eligiblePartners)) {
+        for (const p of state.eligiblePartners) {
+          if (String(p.id) !== String(partnerId)) {
+            io.to(`partner:${p.id}`).emit('request_taken', takenPayload);
+          }
+        }
+      } else {
+        io.to(`request:${requestId}`).emit('request_taken', takenPayload);
+      }
+    }
+
+    activeDispatches.delete(String(requestId));
+
+    return {
+      success: true,
+      request: acceptedPayload,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    // Unique partial index violation (idx_requests_active_partner)
+    if (err.code === '23505') {
+      return {
+        success: false,
+        reason: 'already_on_job',
+        message: 'you are already on a job',
+      };
+    }
+    throw err;
+  } finally {
+    client.release();
   }
-
-  if (state.timer) {
-    clearTimeout(state.timer);
-    state.timer = null;
-  }
-  state.status = 'accepted';
-
-  // Update PostgreSQL database with accepted partner & status
-  await db.query(
-    `UPDATE requests
-     SET partner_id = $1, status = 'accepted', updated_at = CURRENT_TIMESTAMP
-     WHERE id = $2`,
-    [partnerId, requestId]
-  );
-
-  await db.query(
-    `INSERT INTO request_status_logs (request_id, status) VALUES ($1, 'accepted')`,
-    [requestId]
-  );
-
-  const etaMinutes =
-    currentPartner.eta_minutes ||
-    Math.max(5, Math.round(Number(currentPartner.distance_km || 1) * 6 + 5));
-
-  const partnerProfile = {
-    id: currentPartner.id,
-    name: currentPartner.name,
-    phone: currentPartner.phone,
-    service_id: currentPartner.service_id,
-    service_name: currentPartner.service_name,
-    rating: currentPartner.rating,
-    total_jobs: currentPartner.total_jobs,
-    badge: currentPartner.badge || 'Certified Tradesperson',
-    vehicle: currentPartner.vehicle || 'Standard Service Vehicle',
-    distance_km: currentPartner.distance_km,
-    eta_minutes: etaMinutes,
-    photo_url: currentPartner.photo_url || null,
-  };
-
-  const acceptedPayload = {
-    requestId: state.request.id,
-    order_number: state.request.order_number,
-    status: 'accepted',
-    step_index: 1, // Step 1: Request accepted (docs/DESIGN.md line 84)
-    partner: partnerProfile,
-    service_otp: state.request.service_otp,
-    address: state.request.address,
-    problem: state.request.problem,
-    service_name: state.request.service_name,
-  };
-
-  if (io) {
-    // Notify customer room
-    io.to(`customer:${state.request.customer_id}`).emit('request_accepted', acceptedPayload);
-    io.to(`request:${state.request.id}`).emit('request_accepted', acceptedPayload);
-
-    // Confirm to accepting partner
-    io.to(`partner:${partnerId}`).emit('request_confirmed', {
-      ...acceptedPayload,
-      job: {
-        ...state.request,
-        status: 'accepted',
-        step_index: 1,
-        partner: partnerProfile,
-      },
-    });
-  }
-
-  // Remove dispatch from active dispatches
-  activeDispatches.delete(String(requestId));
-
-  return {
-    success: true,
-    request: acceptedPayload,
-  };
 }
 
 /**
- * Partner declines the incoming job offer
+ * Partner declines the incoming job offer.
+ * Decline only removes the request from that partner's own screen.
+ * If every eligible partner declines, triggers "All partners busy, try again later".
  *
  * @param {string} requestId
  * @param {string} partnerId
@@ -377,98 +612,130 @@ export async function handlePartnerDecline(requestId, partnerId, reason = 'PARTN
   const state = activeDispatches.get(String(requestId));
   if (!state) return { success: false, message: 'Dispatch inactive.' };
 
-  const currentPartner = state.eligiblePartners[state.currentIndex];
-  if (currentPartner && String(currentPartner.id) === String(partnerId)) {
+  state.declinedPartnerIds.add(String(partnerId));
+
+  if (io) {
+    io.to(`partner:${partnerId}`).emit('request_declined_ack', {
+      requestId,
+      reason,
+    });
+  }
+
+  // If every eligible partner has declined, trigger all partners busy
+  if (state.declinedPartnerIds.size >= state.eligiblePartners.length) {
     if (state.timer) {
       clearTimeout(state.timer);
       state.timer = null;
     }
-
-    if (io) {
-      io.to(`partner:${partnerId}`).emit('request_declined_ack', {
-        requestId,
-        reason,
-      });
-    }
-
-    // Cascade to next partner immediately
-    state.currentIndex++;
-    offerToCurrentPartner(requestId);
-    return { success: true };
+    await handleMatchingTimeout(requestId);
   }
 
-  return { success: false, message: 'Not the currently offered partner.' };
+  return { success: true };
 }
 
 /**
- * Customer cancels the request while searching, matching, or in active trip
- * Conforms to docs/SRS.md FR-C19, FR-T3.
+ * Single time-out mechanism per request.
+ * Safe if it fires during an accept, and will not fire after accept.
+ *
+ * @param {string} requestId
+ */
+export async function handleMatchingTimeout(requestId) {
+  const state = activeDispatches.get(String(requestId));
+  if (state && state.timer) {
+    clearTimeout(state.timer);
+    state.timer = null;
+  }
+  activeDispatches.delete(String(requestId));
+
+  // Atomic conditional update in DB: only if still searching
+  const res = await db.query(
+    `UPDATE requests
+     SET status = 'cancelled', cancel_reason = 'All partners busy, try again later', updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1 AND (status = 'searching' OR status = 'requested') AND partner_id IS NULL
+     RETURNING *`,
+    [requestId]
+  );
+
+  if (res.rows.length > 0) {
+    await db.query(
+      `INSERT INTO request_status_logs (request_id, status) VALUES ($1, 'cancelled')`,
+      [requestId]
+    );
+
+    if (io) {
+      const orderNumber =
+        res.rows[0].order_number ||
+        state?.request?.order_number ||
+        `ORD-${String(requestId).replace(/-/g, '').slice(0, 4).toUpperCase()}`;
+
+      const busyEvent = {
+        requestId,
+        order_number: orderNumber,
+        status: 'busy',
+        message: 'All partners busy, try again later',
+        reason: 'ALL_PARTNERS_BUSY',
+      };
+
+      io.to(`customer:${res.rows[0].customer_id}`).emit('all_partners_busy', busyEvent);
+      io.to(`request:${requestId}`).emit('all_partners_busy', busyEvent);
+
+      if (state && Array.isArray(state.eligiblePartners)) {
+        for (const p of state.eligiblePartners) {
+          io.to(`partner:${p.id}`).emit('request_timeout', {
+            requestId,
+            order_number: orderNumber,
+            message: 'Request offer timed out. You remain online for next dispatch.',
+          });
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Customer cancels the request while searching, matching, or in active trip.
+ * Conforms to Item 1: atomic update and clean notification.
  *
  * @param {string} requestId
  * @param {string} [reason]
  */
 export async function handleCustomerCancel(requestId, reason = 'Cancelled by customer') {
-  // 1. Stop any active location movement simulation
   stopMovementSimulation(requestId);
 
   const state = activeDispatches.get(String(requestId));
-  let targetPartnerId = null;
-  let targetCustomerId = null;
-
-  if (state) {
-    if (state.timer) {
-      clearTimeout(state.timer);
-      state.timer = null;
-    }
-    state.status = 'cancelled';
-
-    const currentPartner = state.eligiblePartners[state.currentIndex];
-    if (currentPartner) {
-      targetPartnerId = currentPartner.id;
-    }
-    targetCustomerId = state.request?.customer_id;
-    activeDispatches.delete(String(requestId));
+  if (state && state.timer) {
+    clearTimeout(state.timer);
+    state.timer = null;
   }
+  activeDispatches.delete(String(requestId));
 
-  // 2. Fetch DB request record to resolve assigned partner and customer if already accepted
-  try {
-    const checkRes = await db.query(
-      'SELECT customer_id, partner_id FROM requests WHERE id = $1',
-      [requestId]
-    );
-    if (checkRes.rows.length > 0) {
-      targetCustomerId = checkRes.rows[0].customer_id || targetCustomerId;
-      if (checkRes.rows[0].partner_id) {
-        targetPartnerId = checkRes.rows[0].partner_id;
-      }
-    }
-  } catch (err) {
-    console.warn('[SocketService DB Query on Cancel Warning]:', err.message);
-  }
-
-  // 3. Update DB
-  await db.query(
+  const updateRes = await db.query(
     `UPDATE requests
      SET status = 'cancelled', cancel_reason = $1, updated_at = CURRENT_TIMESTAMP
-     WHERE id = $2`,
+     WHERE id = $2 AND status NOT IN ('service_completed', 'payment_completed', 'cancelled')
+     RETURNING *`,
     [reason, requestId]
   );
+
+  if (updateRes.rows.length === 0) {
+    return { success: false, message: 'Request is already completed or cancelled.' };
+  }
+
+  const reqRow = updateRes.rows[0];
 
   await db.query(
     `INSERT INTO request_status_logs (request_id, status) VALUES ($1, 'cancelled')`,
     [requestId]
   );
 
-  // 4. Free the partner for new dispatches (SRS FR-C19)
-  if (targetPartnerId) {
+  if (reqRow.partner_id) {
     try {
-      await db.query(`UPDATE partners SET online = true WHERE id = $1`, [targetPartnerId]);
+      await db.query(`UPDATE partners SET online = true WHERE id = $1`, [reqRow.partner_id]);
     } catch (err) {
       console.warn('[SocketService Partner Free Warning]:', err.message);
     }
   }
 
-  // 5. Broadcast cancellation to all relevant Socket.IO rooms
   if (io) {
     const cancelPayload = {
       requestId,
@@ -478,55 +745,61 @@ export async function handleCustomerCancel(requestId, reason = 'Cancelled by cus
     };
 
     io.to(`request:${requestId}`).emit('request_cancelled', cancelPayload);
-    if (targetCustomerId) {
-      io.to(`customer:${targetCustomerId}`).emit('request_cancelled', cancelPayload);
+    io.to(`customer:${reqRow.customer_id}`).emit('request_cancelled', cancelPayload);
+
+    if (reqRow.partner_id) {
+      io.to(`partner:${reqRow.partner_id}`).emit('request_cancelled', cancelPayload);
     }
-    if (targetPartnerId) {
-      io.to(`partner:${targetPartnerId}`).emit('request_cancelled', cancelPayload);
+    if (state && Array.isArray(state.eligiblePartners)) {
+      for (const p of state.eligiblePartners) {
+        io.to(`partner:${p.id}`).emit('request_cancelled', cancelPayload);
+      }
     }
   }
 
-  return { success: true };
+  return { success: true, request: reqRow };
 }
 
 /**
- * Handles exhausted partner list (All partners declined, timed out, or none eligible)
- *
- * @param {string} requestId
+ * Requirement h: If the server restarts, requests stuck in 'searching' are expired
+ * cleanly on startup (customer sees "All partners busy"), no timers are orphaned,
+ * and no job is left half-assigned.
  */
-async function handleMatchingExhausted(requestId) {
-  const state = activeDispatches.get(String(requestId));
-  if (!state) return;
-
-  activeDispatches.delete(String(requestId));
-
+export async function cleanupOrphanedSearchingRequests() {
   try {
-    await db.query(
+    const res = await db.query(
       `UPDATE requests
-       SET status = 'cancelled', cancel_reason = 'All partners busy, try again later', updated_at = CURRENT_TIMESTAMP
-       WHERE id = $1`,
-      [requestId]
+       SET status = 'cancelled',
+           cancel_reason = 'All partners busy, try again later',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE (status = 'searching' OR (status = 'requested' AND partner_id IS NULL))
+       RETURNING id, customer_id, service_id`
     );
 
-    await db.query(
-      `INSERT INTO request_status_logs (request_id, status) VALUES ($1, 'cancelled')`,
-      [requestId]
-    );
+    for (const row of res.rows) {
+      await db.query(
+        `INSERT INTO request_status_logs (request_id, status) VALUES ($1, 'cancelled')`,
+        [row.id]
+      );
+      if (io) {
+        const orderNumber = `ORD-${String(row.id).replace(/-/g, '').slice(0, 4).toUpperCase()}`;
+        const busyEvent = {
+          requestId: row.id,
+          order_number: orderNumber,
+          status: 'busy',
+          message: 'All partners busy, try again later',
+          reason: 'ALL_PARTNERS_BUSY',
+        };
+        io.to(`customer:${row.customer_id}`).emit('all_partners_busy', busyEvent);
+        io.to(`request:${row.id}`).emit('all_partners_busy', busyEvent);
+      }
+    }
+
+    if (res.rows.length > 0) {
+      console.log(`[Startup Cleanup] Expired ${res.rows.length} orphaned searching request(s).`);
+    }
   } catch (err) {
-    console.error('[SocketService DB Error on Exhausted]:', err.message);
-  }
-
-  if (io) {
-    const busyEvent = {
-      requestId: state.request.id,
-      order_number: state.request.order_number,
-      status: 'busy',
-      message: 'All partners busy, try again later',
-      reason: 'ALL_PARTNERS_BUSY',
-    };
-
-    io.to(`customer:${state.request.customer_id}`).emit('all_partners_busy', busyEvent);
-    io.to(`request:${requestId}`).emit('all_partners_busy', busyEvent);
+    console.error('[Startup Cleanup Error]:', err.message);
   }
 }
 
@@ -665,6 +938,8 @@ export default {
   handlePartnerAccept,
   handlePartnerDecline,
   handleCustomerCancel,
+  handleMatchingTimeout,
+  cleanupOrphanedSearchingRequests,
   startMovementSimulation,
   stopMovementSimulation,
   notifyRequestStatusUpdate,

@@ -14,7 +14,7 @@ import { verifyToken } from '../services/token.service.js';
  * Authenticates request via JWT
  */
 export function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'] || req.headers['x-access-token'];
+  const authHeader = req.headers['authorization'] || req.headers['x-access-token'] || req.query?.token;
 
   if (!authHeader) {
     return res.status(401).json({

@@ -177,7 +177,7 @@ export default function SearchingView({
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 bg-signal inline-block animate-ping" />
               <span className="font-bold text-signal uppercase tracking-wider">
-                OFFERING TO PARTNER {partnerAttempt} OF {Math.max(1, totalPartners)}
+                BROADCASTING TO {Math.max(1, totalPartners)} ELIGIBLE PARTNERS
               </span>
             </div>
             <span className="font-bold uppercase text-[var(--theme-text-muted)]">

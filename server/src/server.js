@@ -7,7 +7,7 @@ import http from 'http';
 import config from './config/index.js';
 import db from './config/db.js';
 import app from './app.js';
-import { initSocketServer } from './services/socket.service.js';
+import { initSocketServer, cleanupOrphanedSearchingRequests } from './services/socket.service.js';
 
 const PORT = config.port || 5000;
 
@@ -23,6 +23,9 @@ async function startServer() {
 
   const httpServer = http.createServer(app);
   initSocketServer(httpServer);
+
+  // Requirement h: If server restarts, cleanly expire orphaned searching requests
+  await cleanupOrphanedSearchingRequests();
 
   const server = httpServer.listen(PORT, () => {
     console.log(`===============================================`);

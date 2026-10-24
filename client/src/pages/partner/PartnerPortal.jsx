@@ -129,9 +129,9 @@ export default function PartnerPortal({
     socketService.registerPartner(partner.id);
 
     const unsubIncoming = socketService.onIncomingRequest((data) => {
-      // Only show popup if online
-      if (online && data?.job) {
+      if (data?.job) {
         setIncomingJob(data.job);
+        setOnline(true);
       }
     });
 
@@ -188,10 +188,28 @@ export default function PartnerPortal({
       });
     });
 
+    const unsubTaken = socketService.onRequestTaken((data) => {
+      setIncomingJob((cur) => {
+        if (
+          cur &&
+          (!data?.requestId ||
+            String(cur.id) === String(data.requestId) ||
+            String(cur.request_id) === String(data.requestId))
+        ) {
+          return {
+            ...cur,
+            notice: data?.message || 'Request accepted by another partner',
+          };
+        }
+        return cur;
+      });
+    });
+
     return () => {
       unsubIncoming();
       unsubTimeout();
       unsubCancelled();
+      unsubTaken();
     };
   }, [partner?.id, online]);
 
@@ -249,10 +267,9 @@ export default function PartnerPortal({
     setIncomingJob(mock);
   };
 
-  // Accept incoming job (SRS FR-P9)
+  // Accept incoming job (SRS FR-P9 / Item 1)
   const handleAcceptIncomingJob = async (job) => {
     const reqId = job.id || job.request_id;
-    setIncomingJob(null);
     try {
       if (partner?.id && reqId) {
         socketService.respondToJob(reqId, partner.id, 'accept');
@@ -260,17 +277,31 @@ export default function PartnerPortal({
     } catch (socketErr) {
       console.warn('[Socket Accept Warning]:', socketErr.message);
     }
-    const accepted = await acceptIncomingJob(job);
-    setActiveJobState(accepted);
-    showToast(`✓ Work order ${accepted.order_number} accepted! Navigating to active trip.`);
-    handleSelectTab('active-job');
+
+    const result = await acceptIncomingJob(job);
+    if (result && result.success && result.activeJob) {
+      setIncomingJob(null);
+      setActiveJobState(result.activeJob);
+      showToast(`✓ Work order ${result.activeJob.order_number} accepted! Navigating to active trip.`);
+      handleSelectTab('active-job');
+    } else {
+      // The request was taken, cancelled, or expired
+      const noticeMsg = result?.message || 'Request accepted by another partner';
+      setIncomingJob((cur) => (cur ? { ...cur, notice: noticeMsg } : null));
+      showToast(noticeMsg, true);
+    }
   };
 
-  // Decline incoming job (SRS FR-P7)
+  // Decline incoming job (SRS FR-P7 / Item 1)
   const handleDeclineIncomingJob = async (reason) => {
     const currentJob = incomingJob;
     const reqId = currentJob?.id || currentJob?.request_id;
     setIncomingJob(null);
+
+    if (reason === 'NOTICE_DISMISSED') {
+      return;
+    }
+
     if (currentJob && reqId && partner?.id) {
       try {
         socketService.respondToJob(reqId, partner.id, 'decline', reason);
