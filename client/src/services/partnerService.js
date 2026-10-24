@@ -558,6 +558,32 @@ export async function selectOrRenewPlan(partnerId, planId) {
   return newSub;
 }
 
+/**
+ * Creates a new QR payment attempt with locked price (ITEM 3)
+ */
+export async function createPaymentAttempt(planId) {
+  const res = await post('/api/partner/payment-attempt', { plan_id: Number(planId) });
+  if (res && res.data) {
+    return res.data;
+  }
+  throw new Error(res?.message || 'Failed to create payment attempt.');
+}
+
+/**
+ * Retrieves the latest / active payment attempt for plan
+ */
+export async function getActivePaymentAttempt(planId) {
+  try {
+    const res = await get(`/api/partner/payment-attempt/active?plan_id=${Number(planId)}`);
+    if (res && res.data) {
+      return res.data;
+    }
+  } catch (err) {
+    console.warn('[PartnerService] getActivePaymentAttempt failed:', err.message);
+  }
+  return null;
+}
+
 /* ========================================================================== */
 /* 4. KYC VERIFICATION (SRS FR-P4, FR-P5, FR-P7)                              */
 /* ========================================================================== */

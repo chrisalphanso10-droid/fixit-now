@@ -19,6 +19,11 @@ import {
   getPartnerProfile,
   updatePartnerProfile,
 } from '../controllers/partner.controller.js';
+import {
+  createPaymentAttemptHandler,
+  getActivePaymentAttemptHandler,
+  getPaymentAttemptByIdHandler,
+} from '../controllers/payment.controller.js';
 import { authenticateToken, requireRole } from '../middleware/auth.middleware.js';
 import { verifyToken } from '../services/token.service.js';
 import { partnerKycUploadFields } from '../middleware/upload.middleware.js';
@@ -63,6 +68,28 @@ router.post(
   authenticateToken,
   requireRole('partner'),
   subscribePlan
+);
+
+// Payment Attempts (QR Code Scan Payment - ITEM 3)
+router.post(
+  '/payment-attempt',
+  authenticateToken,
+  requireRole('partner'),
+  createPaymentAttemptHandler
+);
+
+router.get(
+  '/payment-attempt/active',
+  authenticateToken,
+  requireRole('partner'),
+  getActivePaymentAttemptHandler
+);
+
+router.get(
+  '/payment-attempt/:id',
+  authenticateToken,
+  requireRole('partner'),
+  getPaymentAttemptByIdHandler
 );
 
 // =============================================================================

@@ -28,7 +28,7 @@ const OTP_REGEX = /^\d{6}$/;
  */
 export async function registerCustomer(req, res, next) {
   try {
-    const { name, email, password, phone, address } = req.body;
+    const { name, email, password, phone, address, terms_accepted } = req.body;
 
     // Field presence validation
     if (!name?.trim()) return res.status(400).json({ status: 'error', message: 'Name is required.' });
@@ -36,6 +36,14 @@ export async function registerCustomer(req, res, next) {
     if (!password) return res.status(400).json({ status: 'error', message: 'Password is required.' });
     if (!phone?.trim()) return res.status(400).json({ status: 'error', message: 'Phone number is required.' });
     if (!address?.trim()) return res.status(400).json({ status: 'error', message: 'Address is required.' });
+
+    // Terms and conditions acceptance check (ITEM 2)
+    if (terms_accepted !== true && terms_accepted !== 'true') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'You must read and agree to the Terms and Conditions to register.',
+      });
+    }
 
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = name.trim();
@@ -89,11 +97,13 @@ export async function registerCustomer(req, res, next) {
     // Hash password with bcrypt
     const passwordHash = await hashPassword(password);
 
-    // Insert new customer
+    // Insert new customer with terms acceptance
     const insertResult = await query(
-      `INSERT INTO customers (name, email, password_hash, phone, address, latitude, longitude)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, name, email, phone, address, latitude, longitude, created_at`,
+      `INSERT INTO customers (
+         name, email, password_hash, phone, address, latitude, longitude,
+         terms_accepted_at, terms_version
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, '1.0')
+       RETURNING id, name, email, phone, address, latitude, longitude, terms_accepted_at, terms_version, created_at`,
       [cleanName, cleanEmail, passwordHash, cleanPhone, cleanAddress, lat, lon]
     );
 
@@ -130,6 +140,8 @@ export async function registerCustomer(req, res, next) {
         address: customer.address,
         latitude: customer.latitude,
         longitude: customer.longitude,
+        terms_accepted_at: customer.terms_accepted_at,
+        terms_version: customer.terms_version,
         role: 'customer',
       },
     });
@@ -319,7 +331,15 @@ export async function resetPasswordCustomer(req, res, next) {
  */
 export async function registerPartner(req, res, next) {
   try {
-    const { name, email, password, phone, address, service_id, vehicle } = req.body;
+    const { name, email, password, phone, address, service_id, vehicle, terms_accepted } = req.body;
+
+    // Terms and conditions acceptance check (ITEM 2)
+    if (terms_accepted !== true && terms_accepted !== 'true') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'You must read and agree to the Terms and Conditions to register.',
+      });
+    }
 
     if (!name?.trim()) return res.status(400).json({ status: 'error', message: 'Name is required.' });
     if (!email?.trim()) return res.status(400).json({ status: 'error', message: 'Email is required.' });
@@ -412,13 +432,14 @@ export async function registerPartner(req, res, next) {
     // Hash password with bcrypt
     const passwordHash = await hashPassword(password);
 
-    // Insert partner (pending KYC, offline, total_jobs 0)
+    // Insert partner (pending KYC, offline, total_jobs 0, terms accepted)
     const insertResult = await query(
       `INSERT INTO partners (
          name, email, password_hash, phone, address, service_id,
-         vehicle, latitude, longitude, kyc_status, online, rating, total_jobs
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'not_submitted', false, 5.00, 0)
-       RETURNING id, name, email, phone, address, service_id, vehicle, latitude, longitude, kyc_status, online, rating, total_jobs, created_at`,
+         vehicle, latitude, longitude, kyc_status, online, rating, total_jobs,
+         terms_accepted_at, terms_version
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'not_submitted', false, 5.00, 0, CURRENT_TIMESTAMP, '1.0')
+       RETURNING id, name, email, phone, address, service_id, vehicle, latitude, longitude, kyc_status, online, rating, total_jobs, terms_accepted_at, terms_version, created_at`,
       [
         cleanName,
         cleanEmail,
@@ -461,6 +482,8 @@ export async function registerPartner(req, res, next) {
         online: partner.online,
         rating: parseFloat(partner.rating),
         total_jobs: partner.total_jobs,
+        terms_accepted_at: partner.terms_accepted_at,
+        terms_version: partner.terms_version,
         role: 'partner',
       },
     });

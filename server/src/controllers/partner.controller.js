@@ -16,6 +16,8 @@ import fs from 'fs';
 import path from 'path';
 import { query } from '../config/db.js';
 import { KYC_UPLOAD_DIR } from '../middleware/upload.middleware.js';
+import { getIo, dismissPartnerOffers } from '../services/socket.service.js';
+import { logActivity } from './admin.controller.js';
 
 /**
  * 1. Get Available Subscription Plans (SRS FR-P2)
@@ -291,7 +293,7 @@ export async function uploadPartnerKyc(req, res, next) {
     const photoFile = files.photo ? files.photo[0] : null;
     const tradeCertFile = files.trade_cert ? files.trade_cert[0] : null;
 
-    // Helper to cleanup files on disk if validation fails
+    // Helper to cleanup newly uploaded files on disk if validation or DB operations fail
     const cleanupUploadedFiles = () => {
       [docFile, photoFile, tradeCertFile].forEach((f) => {
         if (f && f.path && fs.existsSync(f.path)) {
@@ -329,14 +331,27 @@ export async function uploadPartnerKyc(req, res, next) {
       });
     }
 
-    // Check if partner already has existing documents or this is a first submission
-    const existingDocs = await query(
-      'SELECT id, document_type FROM kyc_documents WHERE partner_id = $1',
+    // Fetch partner profile to confirm existence and capture email & name for activity logging
+    const partnerRes = await query(
+      'SELECT id, name, email, service_id, kyc_status FROM partners WHERE id = $1',
       [partnerId]
     );
+    if (partnerRes.rows.length === 0) {
+      cleanupUploadedFiles();
+      return res.status(404).json({ status: 'error', message: 'Partner profile not found.' });
+    }
+    const partner = partnerRes.rows[0];
 
-    // Initial submission requires both document (PDF) and photo (JPEG/PNG)
-    if (existingDocs.rows.length === 0 && (!docFile || !photoFile)) {
+    // Find any existing files so they can be deleted ONLY after the new upload succeeded
+    const existingDocs = await query(
+      'SELECT id, document_type, file_path FROM kyc_documents WHERE partner_id = $1',
+      [partnerId]
+    );
+    const oldFiles = existingDocs.rows.map((r) => r.file_path).filter(Boolean);
+    const oldDocIds = existingDocs.rows.map((r) => r.id);
+
+    // Initial submission and Re-KYC document requirements (same file rules as before: doc + photo required)
+    if (!docFile || !photoFile) {
       cleanupUploadedFiles();
       return res.status(400).json({
         status: 'error',
@@ -417,6 +432,60 @@ export async function uploadPartnerKyc(req, res, next) {
        WHERE id = $2`,
       [photoUrl, partnerId]
     );
+
+    // Delete old database records and delete old physical files ONLY after the new upload succeeded
+    if (oldDocIds.length > 0) {
+      await query('DELETE FROM kyc_documents WHERE id = ANY($1)', [oldDocIds]);
+    }
+    oldFiles.forEach((fPath) => {
+      try {
+        if (fPath && fs.existsSync(fPath)) {
+          fs.unlinkSync(fPath);
+        }
+      } catch (unlinkErr) {
+        console.warn('[Re-KYC File Cleanup Warn]:', unlinkErr.message);
+      }
+    });
+
+    // Record an audit log in activity_logs
+    await logActivity(
+      partner.email || req.user?.email || `partner_${partnerId}`,
+      'KYC_SUBMITTED',
+      {
+        partner_id: partnerId,
+        partner_name: partner.name,
+        partner_email: partner.email,
+        govt_id_type: govt_id_type.trim(),
+        previous_status: partner.kyc_status,
+        new_status: 'pending',
+        documents_uploaded: insertedDocs.length,
+        submitted_at: new Date().toISOString(),
+      }
+    );
+
+    // Notify admin room via Socket.IO immediately without full page refresh
+    const io = getIo();
+    if (io) {
+      const kycEvent = {
+        partnerId,
+        partner_id: partnerId,
+        partnerName: partner.name,
+        partner_name: partner.name,
+        partnerEmail: partner.email,
+        partner_email: partner.email,
+        status: 'pending',
+        submittedAt: new Date().toISOString(),
+      };
+      io.to('admin').emit('kyc:submitted', kycEvent);
+      io.emit('kyc:submitted', kycEvent);
+
+      // Dismiss any open request popups on the partner's screen and update status to pending
+      io.to(`partner:${partnerId}`).emit('kyc:status_updated', { kyc_status: 'pending' });
+      io.to(`partner:${partnerId}`).emit('request_dismiss', { reason: 'KYC_PENDING' });
+    }
+
+    // Dismiss active job offers from in-memory dispatches
+    dismissPartnerOffers(partnerId);
 
     return res.status(200).json({
       status: 'success',

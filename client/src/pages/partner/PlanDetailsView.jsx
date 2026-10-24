@@ -11,6 +11,7 @@ import {
   selectOrRenewPlan,
   getSubscriptionPlans,
 } from '../../services/partnerService';
+import QrPaymentModal from '../../components/partner/QrPaymentModal';
 
 export default function PlanDetailsView({
   partner,
@@ -23,6 +24,10 @@ export default function PlanDetailsView({
   const [loading, setLoading] = useState(false);
   const [renewSuccess, setRenewSuccess] = useState(null);
   const [error, setError] = useState(null);
+
+  // QR Payment Modal state for Upgrade & Extension (ITEM 3)
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [selectedPlanForPayment, setSelectedPlanForPayment] = useState(null);
 
   // Forced preview state for testing (Active, Warning, Expired)
   const [forcedDays, setForcedDays] = useState(null);
@@ -42,24 +47,12 @@ export default function PlanDetailsView({
   const isExpiringSoon = isSubscribed && daysRemaining <= 7;
   const isExpired = !isSubscribed;
 
-  // Handle Plan Renewal
-  const handleRenew = async (planId) => {
-    setLoading(true);
+  // Handle Plan Renewal / Upgrade via QR Code (ITEM 3)
+  const handleRenew = (planId) => {
     setError(null);
-    try {
-      const activePartnerId = partner?.id || 101;
-      const renewed = await selectOrRenewPlan(activePartnerId, planId);
-      setCurrentSub(renewed);
-      setForcedDays(null);
-      setRenewSuccess(
-        `Successfully renewed ${renewed.plan_name} Pass! Dispatch radar is now fully unlocked for ${renewed.days_remaining} days.`
-      );
-      if (onPlanRenewed) onPlanRenewed(renewed);
-    } catch (err) {
-      setError(`! ${err.message || 'Renewal failed.'}`);
-    } finally {
-      setLoading(false);
-    }
+    const target = plans.find((p) => p.id === planId) || { id: planId, name: 'Subscription', price: 899, duration_months: 1 };
+    setSelectedPlanForPayment(target);
+    setQrModalOpen(true);
   };
 
   return (
@@ -371,6 +364,28 @@ export default function PlanDetailsView({
             </div>
           </div>
         </div>
+      )}
+
+      {/* QR Payment Modal for Plan Extension / Upgrade (ITEM 3) */}
+      {qrModalOpen && selectedPlanForPayment && (
+        <QrPaymentModal
+          isOpen={qrModalOpen}
+          onClose={() => setQrModalOpen(false)}
+          plan={selectedPlanForPayment}
+          partner={partner}
+          isUpgrade={true}
+          onPaymentSuccess={async (renewedSub) => {
+            const activePartnerId = partner?.id || 101;
+            const sub = renewedSub || (await getPartnerSubscription(activePartnerId));
+            setCurrentSub(sub);
+            setForcedDays(null);
+            setRenewSuccess(
+              `Successfully upgraded/renewed ${sub?.plan_name || selectedPlanForPayment.name} Pass! Dispatch radar is fully active.`
+            );
+            if (onPlanRenewed) onPlanRenewed(sub);
+            setQrModalOpen(false);
+          }}
+        />
       )}
     </div>
   );

@@ -36,6 +36,8 @@ export default function PartnerAuthView({
   const [regVehicle, setRegVehicle] = useState('Hero Splendor / Motorcycle');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
   // SRS FR-P1: Partners choose EXACTLY ONE certified service category
   const [servicesList, setServicesList] = useState([]);
   const [selectedServiceId, setSelectedServiceId] = useState(null);
@@ -156,6 +158,11 @@ export default function PartnerAuthView({
       return;
     }
 
+    if (!termsAccepted) {
+      setError('! You must read and agree to the Terms and Conditions to register.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -168,6 +175,7 @@ export default function PartnerAuthView({
         vehicle: regVehicle?.trim() || 'Two-Wheeler',
         service_id: Number(selectedServiceId),
         password: regPassword,
+        terms_accepted: termsAccepted,
       };
       const newPartner = authRegisterPartner
         ? await authRegisterPartner(regData)
@@ -672,10 +680,38 @@ export default function PartnerAuthView({
             </div>
           </div>
 
+          {/* Required Terms and Conditions Checkbox (ITEM 2) */}
+          <div className="pt-1">
+            <label
+              htmlFor="partner-terms-checkbox"
+              className="flex items-start gap-2.5 cursor-pointer text-xs font-mono leading-relaxed select-none text-[var(--theme-text-main)]"
+            >
+              <input
+                id="partner-terms-checkbox"
+                type="checkbox"
+                checked={termsAccepted}
+                onChange={(e) => setTermsAccepted(e.target.checked)}
+                required
+                className="mt-0.5 w-4 h-4 rounded-none border-2 border-[var(--theme-border)] text-signal focus:ring-0 cursor-pointer"
+              />
+              <span>
+                I have read and agree to the{' '}
+                <button
+                  type="button"
+                  onClick={() => setShowTermsModal(true)}
+                  className="font-bold underline text-[var(--theme-text-main)] hover:text-signal"
+                >
+                  Terms and Conditions
+                </button>
+                <span className="text-signal ml-0.5">*</span>
+              </span>
+            </label>
+          </div>
+
           <button
             type="submit"
-            disabled={loading}
-            className="btn-primary w-full min-h-[48px] text-sm uppercase tracking-wider font-bold shadow-hard"
+            disabled={loading || !termsAccepted}
+            className="btn-primary w-full min-h-[48px] text-sm uppercase tracking-wider font-bold shadow-hard disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'REGISTERING PARTNER...' : 'COMPLETE REGISTRATION & SELECT PLAN →'}
           </button>
@@ -831,6 +867,59 @@ export default function PartnerAuthView({
           </button>
         )}
       </div>
+
+      {/* Partner Terms and Conditions Modal (ITEM 2) */}
+      {showTermsModal && (
+        <div className="fixed inset-0 z-50 bg-ink/75 flex items-center justify-center p-4">
+          <div className="bg-paper border-2 border-ink p-6 max-w-lg w-full shadow-hard text-ink max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b-2 border-ink pb-3 mb-4">
+              <h3 className="font-display font-bold text-sm uppercase tracking-wider text-ink">
+                Partner Terms and Conditions
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowTermsModal(false)}
+                className="px-2 py-0.5 border border-ink bg-concrete font-bold text-xs hover:bg-signal hover:text-ink"
+              >
+                ✕ CLOSE
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs font-sans leading-relaxed text-ink/90">
+              <p className="font-mono text-[11px] text-soft uppercase tracking-wider">
+                Version 1.0 · Partner Agreement
+              </p>
+              <ol className="list-decimal pl-5 space-y-3 font-medium">
+                <li>
+                  I confirm that I am a genuine service professional and that the details and KYC documents I submit are true and belong to me.
+                </li>
+                <li>
+                  I will not cause any trouble, harm, harassment or damage to any customer or their property, and I will carry out jobs honestly and professionally.
+                </li>
+                <li>
+                  I will only accept jobs for the service I registered for.
+                </li>
+                <li>
+                  I understand that FixIt Now is a platform that connects customers with independent partners. FixIt Now is not responsible for the conduct of any partner or customer, or for any loss, damage or dispute that arises between them. By accepting these terms, I accept responsibility for my own actions and agree that any issue is between me and the customer involved.
+                </li>
+              </ol>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-ink/20 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setTermsAccepted(true);
+                  setShowTermsModal(false);
+                }}
+                className="w-full min-h-[40px] border-2 border-ink bg-signal text-ink font-mono text-xs font-bold uppercase tracking-wider shadow-hard-sm hover:opacity-95"
+              >
+                ✓ I Agree to Terms
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

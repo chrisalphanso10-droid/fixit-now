@@ -43,6 +43,8 @@ export default function CustomerAuthView({
   const [regAddress, setRegAddress] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
 
   // Forgot Password state
   const [forgotEmail, setForgotEmail] = useState('ananya@example.com');
@@ -108,6 +110,10 @@ export default function CustomerAuthView({
       setError('! Passwords do not match.');
       return;
     }
+    if (!termsAccepted) {
+      setError('! You must read and agree to the Terms and Conditions to register.');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -117,6 +123,7 @@ export default function CustomerAuthView({
         phone: regPhone.trim(),
         address: regAddress.trim(),
         password: regPassword,
+        terms_accepted: termsAccepted,
       };
       const user = authRegisterCustomer
         ? await authRegisterCustomer(regData)
@@ -484,10 +491,38 @@ export default function CustomerAuthView({
               />
             </div>
 
+            {/* Required Terms and Conditions Checkbox (ITEM 2) */}
+            <div className="pt-2">
+              <label
+                htmlFor="customer-terms-checkbox"
+                className="flex items-start gap-2.5 cursor-pointer text-xs font-mono leading-relaxed select-none"
+              >
+                <input
+                  id="customer-terms-checkbox"
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  required
+                  className="mt-0.5 w-4 h-4 rounded-none border-2 border-ink text-signal focus:ring-0 cursor-pointer"
+                />
+                <span>
+                  I have read and agree to the{' '}
+                  <button
+                    type="button"
+                    onClick={() => setShowTermsModal(true)}
+                    className="font-bold underline text-ink hover:text-signal"
+                  >
+                    Terms and Conditions
+                  </button>
+                  <span className="text-signal ml-0.5">*</span>
+                </span>
+              </label>
+            </div>
+
             <button
               type="submit"
-              disabled={loading}
-              className="btn-primary w-full min-h-[46px] text-sm mt-2"
+              disabled={loading || !termsAccepted}
+              className="btn-primary w-full min-h-[46px] text-sm mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Registering...' : 'Complete Customer Registration →'}
             </button>
@@ -630,6 +665,63 @@ export default function CustomerAuthView({
           </div>
         )}
       </div>
+
+      {/* Customer Terms and Conditions Modal (ITEM 2) */}
+      {showTermsModal && (
+        <div
+          className="fixed inset-0 z-50 bg-ink/80 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-paper border-2 border-ink max-w-lg w-full p-6 shadow-hard text-ink font-mono relative max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b-2 border-ink pb-3 mb-4">
+              <h3 className="font-display font-extrabold text-base tracking-wider uppercase">
+                Customer Terms and Conditions
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowTermsModal(false)}
+                className="px-2 py-0.5 border border-ink bg-concrete font-bold text-xs hover:bg-signal hover:text-ink"
+              >
+                ✕ CLOSE
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs font-sans leading-relaxed text-ink/90">
+              <p className="font-mono text-[11px] text-soft uppercase tracking-wider">
+                Version 1.0 · Customer Agreement
+              </p>
+              <ol className="list-decimal pl-5 space-y-3 font-medium">
+                <li>
+                  I confirm that the details I provide are genuine and that I am registering only to get a real problem fixed.
+                </li>
+                <li>
+                  I have no bad or harmful intentions toward any partner, their property or anyone else.
+                </li>
+                <li>
+                  I will treat partners respectfully and give accurate information about the problem and the address.
+                </li>
+                <li>
+                  I understand that FixIt Now is a platform that connects customers with independent partners. FixIt Now is not responsible for the conduct of any customer or partner, or for any loss, damage or dispute that arises between them. By accepting these terms, I accept responsibility for my own actions and agree that any issue is between me and the partner involved.
+                </li>
+              </ol>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-ink/20 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setTermsAccepted(true);
+                  setShowTermsModal(false);
+                }}
+                className="w-full min-h-[40px] border-2 border-ink bg-signal text-ink font-mono text-xs font-bold uppercase tracking-wider shadow-hard-sm hover:opacity-95"
+              >
+                ✓ I Agree to Terms
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

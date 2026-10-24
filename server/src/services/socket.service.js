@@ -132,12 +132,44 @@ export function initSocketServer(httpServer) {
       io.to(`request:${requestId}`).emit('otp_prompt_customer', { requestId });
     });
 
+    // 7. Admin registration (join admin room for real-time KYC & dispatch alerts)
+    socket.on('register_admin', () => {
+      socket.join('admin');
+      socket.emit('registered', { role: 'admin' });
+    });
+    socket.on('join_admin', () => {
+      socket.join('admin');
+      socket.emit('joined_admin');
+    });
+
     socket.on('disconnect', () => {
       // Socket disconnected cleanly
     });
   });
 
   return io;
+}
+
+/**
+ * Dismiss active request offers from a partner and notify their client
+ * when KYC transitions to pending or rejected.
+ *
+ * @param {string|number} partnerId
+ */
+export function dismissPartnerOffers(partnerId) {
+  const pId = String(partnerId);
+  for (const [reqId, state] of activeDispatches.entries()) {
+    if (state.eligiblePartners) {
+      state.eligiblePartners = state.eligiblePartners.filter((p) => String(p.id) !== pId);
+    }
+    if (state.declinedPartnerIds) {
+      state.declinedPartnerIds.add(pId);
+    }
+  }
+  if (io) {
+    io.to(`partner:${pId}`).emit('request_dismiss', { reason: 'KYC_PENDING' });
+    io.to(`partner:${pId}`).emit('kyc:status_updated', { kyc_status: 'pending' });
+  }
 }
 
 /**
@@ -944,5 +976,6 @@ export default {
   stopMovementSimulation,
   notifyRequestStatusUpdate,
   getActiveDispatch,
+  dismissPartnerOffers,
 };
 

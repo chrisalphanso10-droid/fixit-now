@@ -72,7 +72,7 @@ export async function customerLogin(email, password) {
  * Register a new customer
  * Calls POST /api/auth/customer/register
  */
-export async function customerRegister({ name, email, password, phone, address }) {
+export async function customerRegister({ name, email, password, phone, address, terms_accepted }) {
   if (!name?.trim()) throw new Error('Full name is required.');
   if (!email?.trim()) throw new Error('Email address is required.');
   if (!phone?.trim()) throw new Error('Phone number is required.');
@@ -89,6 +89,7 @@ export async function customerRegister({ name, email, password, phone, address }
     password,
     phone: phone.trim(),
     address: address.trim(),
+    terms_accepted,
   });
 
   if (res.token && res.user) {
@@ -206,7 +207,7 @@ export async function partnerLogin(email, password) {
  * Conforms to SRS FR-P1 & FR-C2
  * Calls POST /api/auth/partner/register
  */
-export async function partnerRegister({ name, email, password, phone, address, service_id, vehicle }) {
+export async function partnerRegister({ name, email, password, phone, address, service_id, vehicle, terms_accepted }) {
   const cleanName = name?.trim();
   const cleanEmail = email?.trim().toLowerCase();
   const cleanPhone = phone?.trim();
@@ -234,6 +235,7 @@ export async function partnerRegister({ name, email, password, phone, address, s
     address: cleanAddress,
     service_id: numServiceId,
     vehicle: vehicle?.trim() || 'Standard Two-Wheeler',
+    terms_accepted,
   });
 
   if (res.token && res.user) {

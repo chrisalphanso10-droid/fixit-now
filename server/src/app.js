@@ -14,6 +14,7 @@ import config from './config/index.js';
 import requestLogger from './middleware/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
+import { payRateLimiter, renderPayPage } from './controllers/payment.controller.js';
 
 const app = express();
 
@@ -49,7 +50,12 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(requestLogger);
 
 // =============================================================================
-// 3. API Root Routes
+// 3. QR Code Payment Page (Server-Rendered Mobile-Friendly - ITEM 3)
+// =============================================================================
+app.get('/pay/:token', payRateLimiter, renderPayPage);
+
+// =============================================================================
+// 4. API Root Routes
 // =============================================================================
 app.use('/api', routes);
 

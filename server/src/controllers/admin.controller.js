@@ -12,6 +12,7 @@
  */
 
 import { query } from '../config/db.js';
+import { getIo, dismissPartnerOffers } from '../services/socket.service.js';
 
 /**
  * Helper to log admin actions into PostgreSQL activity_logs
@@ -943,6 +944,23 @@ export async function adminReviewKycDecision(req, res, next) {
       rejection_reason: cleanReason,
       reviewer_notes: reviewer_notes?.trim() || null,
     });
+
+    const io = getIo();
+    if (io) {
+      io.to(`partner:${partnerId}`).emit('kyc:status_updated', {
+        kyc_status: decision,
+        rejection_reason: cleanReason,
+      });
+      io.to('admin').emit('kyc:reviewed', {
+        partnerId,
+        decision,
+        rejection_reason: cleanReason,
+      });
+    }
+
+    if (decision === 'rejected') {
+      dismissPartnerOffers(partnerId);
+    }
 
     return res.status(200).json({
       status: 'success',

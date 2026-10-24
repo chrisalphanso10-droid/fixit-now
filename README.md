@@ -128,7 +128,28 @@ _(Alternatively, run from root using `npm run dev:server` and `npm run dev:clien
 
 ---
 
-## 6. Verification
+## 6. Mobile Phone QR Scan & Network Setup (Item 3)
+
+To test subscription payments on a physical phone camera:
+
+1. **Connect to Same Network:** Ensure your laptop and phone are connected to the same Wi-Fi network (or connect your laptop to your phone's personal mobile hotspot).
+2. **Find Your Laptop's Local IP:** Open a terminal / PowerShell and run:
+   ```cmd
+   ipconfig
+   ```
+   Locate your active adapter's **IPv4 Address** (e.g. `192.168.0.105` or `192.168.43.xxx`).
+3. **Configure `server/.env`:**
+   Set `PUBLIC_BASE_URL` to your laptop's IP and server port:
+   ```env
+   PUBLIC_BASE_URL=http://192.168.0.105:5001
+   UPI_ID=fixitnow@demo
+   ```
+4. **Windows Firewall:** Ensure your active Wi-Fi connection profile is set to **Private network** (or allow Node.js through Windows Defender Firewall when prompted) so incoming connections on port `5001` are accepted. The backend automatically listens on `0.0.0.0` so all local network interfaces are reachable.
+5. **Scan & Pay:** Open the Partner portal plan selection or upgrade screen, point your phone's camera app at the generated QR code, and tap the link. The page confirms the payment and your partner screen live-updates within 2.5 seconds.
+
+---
+
+## 7. Verification
 
 1. Open your browser and navigate to: **`http://localhost:5173`**
 2. You will see the **FixIt Now Diagnostic Work Order ticket** styled per `docs/DESIGN.md`.

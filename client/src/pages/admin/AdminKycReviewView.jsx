@@ -14,6 +14,7 @@ import {
   approvePartnerKyc,
   rejectPartnerKyc,
 } from '../../services/adminService';
+import { registerAdmin, onKycSubmitted } from '../../services/socketService';
 
 export default function AdminKycReviewView() {
   const [kycList, setKycList] = useState([]);
@@ -132,8 +133,17 @@ export default function AdminKycReviewView() {
           setLoading(false);
         }
       });
+
+    // Real-time Socket.IO compliance feed (ITEM 4 & SRS FR-A4)
+    registerAdmin();
+    const unsub = onKycSubmitted((data) => {
+      // Reload KYC list immediately in other browser without requiring a page refresh
+      loadData(filter);
+    });
+
     return () => {
       active = false;
+      unsub();
     };
   }, [filter]);
 

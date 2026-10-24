@@ -129,9 +129,26 @@ export default function PartnerPortal({
     socketService.registerPartner(partner.id);
 
     const unsubIncoming = socketService.onIncomingRequest((data) => {
-      if (data?.job) {
+      if (data?.job && partner?.kyc_status === 'verified') {
         setIncomingJob(data.job);
         setOnline(true);
+      }
+    });
+
+    const unsubDismiss = socketService.onRequestDismiss(() => {
+      setIncomingJob(null);
+    });
+
+    const unsubKycStatus = socketService.onKycStatusUpdated((data) => {
+      if (data?.kyc_status) {
+        setPartner((cur) => (cur ? {
+          ...cur,
+          kyc_status: data.kyc_status,
+          rejection_reason: data.rejection_reason || null,
+        } : cur));
+        if (data.kyc_status !== 'verified') {
+          setIncomingJob(null);
+        }
       }
     });
 
@@ -207,11 +224,13 @@ export default function PartnerPortal({
 
     return () => {
       unsubIncoming();
+      unsubDismiss();
+      unsubKycStatus();
       unsubTimeout();
       unsubCancelled();
       unsubTaken();
     };
-  }, [partner?.id, online]);
+  }, [partner?.id, partner?.kyc_status, online]);
 
   const handleSelectTab = (tab) => {
     setActiveTab(tab);
@@ -442,7 +461,7 @@ export default function PartnerPortal({
       </PartnerLayout>
 
       {/* Incoming Request Popup (30-second Countdown Ring) */}
-      {incomingJob && (
+      {incomingJob && partner?.kyc_status === 'verified' && (
         <IncomingRequestPopup
           job={incomingJob}
           onAccept={handleAcceptIncomingJob}

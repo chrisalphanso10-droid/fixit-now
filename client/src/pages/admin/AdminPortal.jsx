@@ -21,6 +21,7 @@ import AdminSubscriptionsView from './AdminSubscriptionsView';
 import AdminRatingsView from './AdminRatingsView';
 import AdminActivityLogView from './AdminActivityLogView';
 import { getAdminSession, adminLogout, getAdminKycList } from '../../services/adminService';
+import { registerAdmin, onKycSubmitted } from '../../services/socketService';
 
 export default function AdminPortal({
   initialTab = 'dashboard',
@@ -39,14 +40,25 @@ export default function AdminPortal({
     }
   }, [initialTab]);
 
-  // Load pending KYC count for sidebar badge
+  // Load pending KYC count for sidebar badge and listen live via Socket.IO
   useEffect(() => {
     if (session) {
+      registerAdmin();
       getAdminKycList('pending')
         .then((list) => {
           setPendingKycCount(Array.isArray(list) ? list.length : 0);
         })
         .catch(() => {});
+
+      const unsub = onKycSubmitted(() => {
+        getAdminKycList('pending')
+          .then((list) => {
+            setPendingKycCount(Array.isArray(list) ? list.length : 0);
+          })
+          .catch(() => {});
+      });
+
+      return () => unsub();
     }
   }, [session, activeTab]);
 

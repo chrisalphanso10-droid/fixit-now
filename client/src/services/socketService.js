@@ -231,10 +231,55 @@ export function off(event, callback) {
   }
 }
 
+/**
+ * Registers admin room for real-time compliance events
+ */
+export function registerAdmin() {
+  const s = getSocket();
+  if (s) {
+    s.emit('register_admin');
+    s.emit('join_admin');
+  }
+}
+
+/**
+ * Subscribes to live KYC submissions (Admin side)
+ */
+export function onKycSubmitted(callback) {
+  const s = getSocket();
+  if (!s) return () => {};
+  const handler = (data) => callback(data);
+  s.on('kyc:submitted', handler);
+  return () => s.off('kyc:submitted', handler);
+}
+
+/**
+ * Subscribes to request offer dismissals (Partner side)
+ */
+export function onRequestDismiss(callback) {
+  const s = getSocket();
+  if (!s) return () => {};
+  const handler = (data) => callback(data);
+  s.on('request_dismiss', handler);
+  return () => s.off('request_dismiss', handler);
+}
+
+/**
+ * Subscribes to partner KYC status updates (Partner side)
+ */
+export function onKycStatusUpdated(callback) {
+  const s = getSocket();
+  if (!s) return () => {};
+  const handler = (data) => callback(data);
+  s.on('kyc:status_updated', handler);
+  return () => s.off('kyc:status_updated', handler);
+}
+
 export default {
   getSocket,
   registerPartner,
   registerCustomer,
+  registerAdmin,
   joinRequest,
   respondToJob,
   cancelJob,
@@ -245,6 +290,9 @@ export default {
   onRequestCancelled,
   onRequestAccepted,
   onRequestTaken,
+  onRequestDismiss,
+  onKycSubmitted,
+  onKycStatusUpdated,
   onSearchingUpdate,
   onAllPartnersBusy,
   onPartnerLocation,

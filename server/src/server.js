@@ -8,6 +8,7 @@ import config from './config/index.js';
 import db from './config/db.js';
 import app from './app.js';
 import { initSocketServer, cleanupOrphanedSearchingRequests } from './services/socket.service.js';
+import { recoverPaymentAttemptsOnStartup } from './services/payment.service.js';
 
 const PORT = config.port || 5000;
 
@@ -27,12 +28,17 @@ async function startServer() {
   // Requirement h: If server restarts, cleanly expire orphaned searching requests
   await cleanupOrphanedSearchingRequests();
 
-  const server = httpServer.listen(PORT, () => {
+  // ITEM 3: Recover payment attempts on startup (complete processing attempts, expire past-expiry ones)
+  await recoverPaymentAttemptsOnStartup();
+
+  const server = httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`===============================================`);
-    console.log(`FixIt Now Backend Server running on port ${PORT}`);
+    console.log(`FixIt Now Backend Server running on port ${PORT} (0.0.0.0)`);
     console.log(`Socket.IO Engine:  Ready for dispatches & rooms`);
     console.log(`Health Diagnostic: http://localhost:${PORT}/api/health`);
     console.log(`Environment:       ${config.nodeEnv}`);
+    console.log(`Public Base URL:   ${config.publicBaseUrl || process.env.PUBLIC_BASE_URL || 'http://localhost:' + PORT}`);
+    console.log(`UPI Demo ID:       ${config.upiId || process.env.UPI_ID || 'fixitnow@demo'}`);
     console.log(`===============================================`);
   });
 

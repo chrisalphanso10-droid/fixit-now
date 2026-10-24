@@ -28,6 +28,10 @@ export const config = {
   // External Geocoding Interface (SRS Section 4)
   nominatimUserAgent:
     process.env.NOMINATIM_USER_AGENT || 'FixItNow-HomeServicesApp/1.0 (info@fixitnow.local)',
+
+  // Public Base URL and UPI ID for QR Code Payments (ITEM 3)
+  publicBaseUrl: process.env.PUBLIC_BASE_URL || 'http://localhost:5001',
+  upiId: process.env.UPI_ID || 'fixitnow@demo',
 };
 
 export default config;
